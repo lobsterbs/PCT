@@ -1,0 +1,15 @@
+PCT (Proxy Compatibility Test)
+
+This product uses third-party software. Upstream license and notice texts are copied
+verbatim into packages/web/dist/third-party/ at build time from the installed packages.
+
+Material Design 3 Expressive web adaptation
+  Package: @materialwebunofficial/md3e-web 1.0.5
+  License: Apache License 2.0
+  Upstream NOTICE: included verbatim in packages/web/dist/third-party/md3e-web/NOTICE
+
+The upstream NOTICE credits Google LLC (Material Design 3), the Android Open Source
+Project (AndroidX Compose Material 3, graphics-shapes), and related sources. Those
+notices are reproduced in full by the copy above and are not restated here.
+
+This project is not affiliated with, endorsed by, or sponsored by Google LLC.

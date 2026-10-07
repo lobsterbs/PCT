@@ -84,7 +84,10 @@ export interface ValidReport extends ReportBase {
   /** Unrounded, after caps. Use this for comparisons. */
   readonly rawCompatibility: number;
   readonly grade: Grade;
+  /** Caps that actually lowered the score. A cap above the raw score is not listed here. */
   readonly caps: readonly AppliedCap[];
+  /** Every critical test that FAILED, whether or not its cap lowered the score. */
+  readonly criticalFailures: readonly string[];
   readonly categories: readonly CategoryScore[];
 }
 
@@ -200,7 +203,9 @@ export function computeScore(input: ScoreInput): ScoreReport {
     scoredTests: c.n,
   }));
 
-  const ceiling = appliedCaps.length > 0 ? Math.min(...appliedCaps.map((c) => c.maxScore)) : Infinity;
+  // Only caps below the raw score are binding. Others are reported as critical failures, not caps.
+  const binding = appliedCaps.filter((c) => c.maxScore < rawCompatibility);
+  const ceiling = binding.length > 0 ? Math.min(...binding.map((c) => c.maxScore)) : Infinity;
   const finalRaw = Math.min(rawCompatibility, ceiling);
   const compatibility = roundOneDecimal(finalRaw);
 
@@ -213,7 +218,8 @@ export function computeScore(input: ScoreInput): ScoreReport {
     compatibility,
     rawCompatibility: finalRaw,
     grade: gradeFor(compatibility),
-    caps: appliedCaps,
+    caps: binding,
+    criticalFailures: appliedCaps.map((c) => c.testId),
     categories,
   };
 }

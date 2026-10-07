@@ -1,0 +1,14 @@
+{
+  "name": "@pct/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node scripts/copy-notices.mjs",
+    "notices": "node scripts/copy-notices.mjs"
+  },
+  "dependencies": {
+    "@materialwebunofficial/md3e-web": "1.0.5",
+    "@pct/core": "0.1.0"
+  }
+}

@@ -4,10 +4,15 @@
   "private": true,
   "description": "Proxy Compatibility Test: engine-neutral behavioral benchmark for web proxies",
   "type": "module",
-  "workspaces": ["packages/core"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/core",
+    "packages/web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "build": "npm run build -w @pct/core",
+    "build": "npm run build -w @pct/core && npm run build -w @pct/web",
     "typecheck": "tsc -p packages/core/tsconfig.json --noEmit",
     "test": "npm run build && node --test packages/core/dist/test/*.test.js"
   },

@@ -118,7 +118,7 @@ test("cookie isolation failure caps at 69.9 (grade D)", () => {
   }
 });
 
-test("a cap does not raise a score that is already below it", () => {
+test("a cap does not lower a score that is already below it", () => {
   const defs = [def("origin.isolation.001", "security", "core", { critical: true })];
   const r = computeScore(input(defs, [res("origin.isolation.001", "fail")]));
   assert.ok(r.valid);
@@ -200,4 +200,16 @@ test("grade bands match the proposal boundaries", () => {
 test("display rounding: 92.96 shows 93.0", () => {
   assert.equal(roundOneDecimal(92.96), 93);
   assert.equal(roundOneDecimal(91.44), 91.4);
+});
+
+test("a critical FAIL whose cap does not bind is reported as a failure, not an applied cap", () => {
+  // html pass (w8) + security critical fail (w12): raw = 40, below the 76.9 ceiling
+  const defs = [def("html.a.001", "html"), def("origin.isolation.001", "security", "core", { critical: true })];
+  const r = computeScore(input(defs, [res("html.a.001", "pass"), res("origin.isolation.001", "fail")]));
+  assert.ok(r.valid);
+  if (r.valid) {
+    assert.equal(r.compatibility, 40);
+    assert.deepEqual(r.caps, []);
+    assert.deepEqual(r.criticalFailures, ["origin.isolation.001"]);
+  }
 });
