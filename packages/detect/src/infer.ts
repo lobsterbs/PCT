@@ -31,7 +31,7 @@ export function inferEngines(obs: Observations, profiles: readonly EngineProfile
     }
     const confidence = confidenceFor(hits);
     if (confidence) {
-      out.push({ engine: profile.engine, profileVersion: profile.profileVersion, confidence, hits, label: "possible" });
+      out.push({ engine: profile.engine, kind: profile.kind, profileVersion: profile.profileVersion, confidence, hits, label: "possible" });
     }
   }
   const rank: Record<Confidence, number> = { high: 3, medium: 2, low: 1 };
