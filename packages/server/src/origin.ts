@@ -3,20 +3,24 @@ import { gzipSync } from "node:zlib";
 import { deterministicBytes, sha256Hex } from "./payload.js";
 
 /**
- * PCT test origin. Every endpoint is deterministic given the run nonce. It never fetches anything,
+ * PCT test origin. Every endpoint is deterministic given the run secret. It never fetches anything,
  * so it cannot be used as a fetch proxy (see SSRF rules).
  */
 
 export interface TestOriginOptions {
   /** 0 picks a free port. */
   readonly port?: number;
-  /** Interface to bind. 0.0.0.0 lets a remote proxy reach it. */
+  /** Interface to bind. Default 127.0.0.1. Use 0.0.0.0 only for a remote proxy, on a trusted network. */
   readonly bindHost?: string;
+  /** Public run id. Safe to show and to send through the proxy. Not a secret. */
   readonly nonce: string;
+  /** Run secret. Derives every payload. Never sent to the proxy, never in a URL, header, or body. */
+  readonly secret: string;
 }
 
 export interface TestOrigin {
   readonly port: number;
+  readonly host: string;
   close(): Promise<void>;
 }
 
@@ -30,10 +34,12 @@ export const CHUNKED_CHUNK_COUNT = 16;
 export const cspFor = (nonce: string): string =>
   `default-src 'self'; script-src 'self' 'nonce-${nonce}'; object-src 'none'`;
 
-export const rangePayload = (nonce: string): Buffer => deterministicBytes(RANGE_PAYLOAD_SIZE, `${nonce}:range`);
-export const gzipPayload = (nonce: string): Buffer => deterministicBytes(GZIP_PAYLOAD_SIZE, `${nonce}:gzip`);
-export const chunkedPayload = (nonce: string): Buffer =>
-  deterministicBytes(CHUNKED_CHUNK_SIZE * CHUNKED_CHUNK_COUNT, `${nonce}:chunked`);
+/** Payload generators take the run SECRET. Anyone holding only the public run id cannot reproduce them. */
+export const rangePayload = (secret: string): Buffer => deterministicBytes(RANGE_PAYLOAD_SIZE, `${secret}:range`);
+export const gzipPayload = (secret: string): Buffer => deterministicBytes(GZIP_PAYLOAD_SIZE, `${secret}:gzip`);
+export const chunkedPayload = (secret: string): Buffer =>
+  deterministicBytes(CHUNKED_CHUNK_SIZE * CHUNKED_CHUNK_COUNT, `${secret}:chunked`);
+export const largePayload = (secret: string, bytes: number): Buffer => deterministicBytes(bytes, `${secret}:large:${bytes}`);
 export const htmlPayload = (nonce: string): string =>
   `<!doctype html><meta charset="utf-8"><title>pct</title><p id="pct-text">h\u00e9llo-${nonce}</p>`;
 
@@ -71,6 +77,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown, extra: Rec
   res.end(JSON.stringify(body));
 }
 
+/** The echoed path omits the proxy's own control parameters, if any, so echo tests see the URL they sent. */
 function echoBody(req: IncomingMessage, url: URL, body: Buffer) {
   return {
     method: req.method ?? "",
@@ -85,7 +92,7 @@ const NAME = /^[A-Za-z0-9_]{1,32}$/;
 const VALUE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
-  const { nonce } = opts;
+  const { nonce, secret } = opts;
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<unknown> => {
     const url = new URL(req.url ?? "/", "http://pct.invalid");
@@ -121,7 +128,7 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
         return sendJson(res, 200, { cookie: req.headers.cookie ?? null });
 
       case "/gzip": {
-        const payload = gzipSync(gzipPayload(nonce));
+        const payload = gzipSync(gzipPayload(secret));
         res.writeHead(200, {
           "content-type": "application/octet-stream",
           "content-encoding": "gzip",
@@ -131,7 +138,7 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
       }
 
       case "/range": {
-        const payload = rangePayload(nonce);
+        const payload = rangePayload(secret);
         const m = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range ?? "");
         if (m) {
           const start = Number(m[1]);
@@ -157,7 +164,7 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
 
       case "/chunked": {
         // No content-length: the response must be chunked-encoded by the origin.
-        const payload = chunkedPayload(nonce);
+        const payload = chunkedPayload(secret);
         res.writeHead(200, { "content-type": "application/octet-stream" });
         for (let i = 0; i < CHUNKED_CHUNK_COUNT; i++) {
           res.write(payload.subarray(i * CHUNKED_CHUNK_SIZE, (i + 1) * CHUNKED_CHUNK_SIZE));
@@ -178,8 +185,8 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
       case "/large": {
         const requested = Number(url.searchParams.get("bytes") ?? "1048576");
         const bytes = Number.isInteger(requested) ? Math.min(Math.max(requested, 0), MAX_LARGE_BYTES) : 1048576;
-        const seed = url.searchParams.get("seed") ?? "default";
-        const payload = deterministicBytes(bytes, seed);
+        // Any "seed" query parameter is ignored on purpose: the payload comes from the secret only.
+        const payload = largePayload(secret, bytes);
         res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(payload.length) });
         return res.end(payload);
       }
@@ -231,7 +238,7 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
 
   return new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, opts.bindHost ?? "0.0.0.0", () => {
+    server.listen(opts.port ?? 0, opts.bindHost ?? "127.0.0.1", () => {
       const address = server.address();
       if (!address || typeof address === "string") {
         reject(new Error("test origin did not bind to a TCP port"));
@@ -239,6 +246,7 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
       }
       resolve({
         port: address.port,
+        host: address.address,
         close: () =>
           new Promise<void>((done) => {
             server.closeAllConnections();

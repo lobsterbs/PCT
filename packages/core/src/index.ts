@@ -6,3 +6,4 @@ export * from "./redact.js";
 export * from "./canonical.js";
 export * from "./manifest.js";
 export * from "./adapter.js";
+export * from "./session.js";

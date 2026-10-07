@@ -5,10 +5,15 @@
 
 const SENSITIVE_KEY = /cookie|authorization|token|password|passwd|secret|api[-_]?key|session/i;
 const AUTH_SCHEME = /\b(Bearer|Basic|Digest)\s+[A-Za-z0-9._~+/=-]+/gi;
+/** name=value pairs that carry cookie attributes, e.g. "sid=abc; Path=/; HttpOnly". Attribute names are excluded. */
+const COOKIE_PAIR =
+  /(?<=^|[;,\s])(?!(?:path|domain|expires|max-age|samesite|httponly|secure)=)([^;,\s=]+)=([^;,\s]+)(?=\s*;\s*(?:path|domain|expires|max-age|samesite|httponly|secure)\b)/gi;
 export const REDACTED = "[REDACTED]";
 
 export function redactString(value: string): string {
-  return value.replace(AUTH_SCHEME, (_match, scheme: string) => `${scheme} ${REDACTED}`);
+  return value
+    .replace(AUTH_SCHEME, (_match, scheme: string) => `${scheme} ${REDACTED}`)
+    .replace(COOKIE_PAIR, (_match, name: string) => `${name}=${REDACTED}`);
 }
 
 export function redact(value: unknown): unknown {

@@ -7,6 +7,7 @@ export interface RunOptions {
   readonly origin1: string;
   readonly origin2: string;
   readonly nonce: string;
+  readonly secret: string;
   readonly timeoutMs: number;
   readonly profile: string;
   readonly suiteVersion: string;

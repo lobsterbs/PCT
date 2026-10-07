@@ -14,10 +14,15 @@ export interface RunContext {
   readonly origin1: string;
   /** Second origin on a different host name, for cookie isolation. e.g. http://localhost:4000 */
   readonly origin2: string;
+  /** Public run id. Safe to appear in URLs and headers. */
   readonly nonce: string;
+  /** Run secret. Never appears in anything sent through the proxy. */
+  readonly secret: string;
   readonly timeoutMs: number;
   /** Builds the proxied URL for a path on a test origin. */
   target(origin: string, path: string): string;
+  /** A parameter unique to this run and this test. Derived from the secret, so it cannot be predicted from earlier runs. */
+  param(testId: string): string;
 }
 
 export interface HttpTest {
