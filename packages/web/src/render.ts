@@ -36,7 +36,7 @@ function renderValid(report: Extract<ScoreReport, { valid: true }>, doc: Documen
     "aria-label": `Compatibility ${score} percent`,
   });
 
-  const hero = el(doc, "md-card", { variant: "elevated" }, [
+  const hero = el(doc, "md-card", { variant: "elevated", class: "pct-hero" }, [
     el(doc, "p", { class: "md-label-large" }, ["Compatibility"]),
     el(doc, "p", { class: "md-display-large", "data-testid": "compat" }, [`${score}%`]),
     grade,
