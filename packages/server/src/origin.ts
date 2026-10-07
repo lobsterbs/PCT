@@ -77,7 +77,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown, extra: Rec
   res.end(JSON.stringify(body));
 }
 
-/** The echoed path omits the proxy's own control parameters, if any, so echo tests see the URL they sent. */
 function echoBody(req: IncomingMessage, url: URL, body: Buffer) {
   return {
     method: req.method ?? "",
