@@ -6,15 +6,20 @@
   "type": "module",
   "workspaces": [
     "packages/core",
+    "packages/detect",
+    "packages/server",
+    "packages/reference-proxy",
+    "packages/runner",
+    "packages/cli",
     "packages/web"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build -w @pct/core && npm run build -w @pct/web",
+    "build": "npm run build -w @pct/core && npm run build -w @pct/detect && npm run build -w @pct/server && npm run build -w @pct/reference-proxy && npm run build -w @pct/runner && npm run build -w @pct/cli && npm run build -w @pct/web",
     "typecheck": "tsc -p packages/core/tsconfig.json --noEmit",
-    "test": "npm run build && node --test packages/core/dist/test/*.test.js"
+    "test": "npm run build && node --test packages/*/dist/test/*.test.js"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
