@@ -1,8 +1,9 @@
 import { hashResult, type ScoreReport } from "@pct/core";
 import {
+  PROBES,
+  PROFILES as DETECTION_PROFILES,
   checkDeclared,
   inferEngines,
-  zeoliteProfile,
   type Attribution,
   type DeclaredCheck,
   type HttpSnapshot,
@@ -73,8 +74,7 @@ async function snapshot(
 export async function collectProbes(proxyBase: string, originBase: string, timeoutMs: number) {
   const targets = [
     `${proxyBase}${originBase}/echo?probe=detect`,
-    new URL("sw.js", proxyBase).href,
-    new URL("wisp/", proxyBase).href,
+    ...PROBES.map((p) => new URL(p, proxyBase).href),
     `${proxyBase}http://127.0.0.1:1/`,
   ];
   const results = [];
@@ -119,7 +119,7 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       const probes = await collectProbes(proxyBase, origin1, timeoutMs);
       const responses = probes.flatMap((p) => (p.snap ? [p.snap] : []));
       const obs: Observations = { responses };
-      const attributions = inferEngines(obs, [zeoliteProfile]);
+      const attributions = inferEngines(obs, DETECTION_PROFILES);
       detection = {
         attributions,
         declaredCheck: checkDeclared(opts.engine, attributions),
@@ -203,7 +203,7 @@ export function summarize(
   if (attributions.length === 0) {
     lines.push("Detection: no possible engine matched (passive only)");
   } else {
-    for (const a of attributions) lines.push(`Detection: possible ${a.engine} (${a.confidence} confidence, passive only)`);
+    for (const a of attributions) lines.push(`Detection: possible ${a.engine} (${a.kind}, ${a.confidence} confidence, passive only)`);
   }
   return lines.join("\n");
 }
