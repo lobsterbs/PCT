@@ -1,4 +1,4 @@
-import { computeScore, type ScoreReport, type TestDefinition, type TestResult } from "@pct/core";
+import { computeScore, type ScoreReport, type TestDefinition, type TestResult } from "@pct/core/browser";
 
 /**
  * SAMPLE DATA, NOT A BENCHMARK RESULT. A tiny fixture scored by the real core rules, so the
