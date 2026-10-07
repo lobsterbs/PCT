@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { CategoryId, TestDefinition, Tier } from "@pct/core";
-import { chunkedPayload, cspFor, deterministicBytes, gzipPayload, rangePayload, sha256Hex } from "@pct/server";
+import { chunkedPayload, cspFor, deterministicBytes, gzipPayload, largePayload, rangePayload, sha256Hex } from "@pct/server";
 import { attempt, isError, parseEcho } from "../http.js";
 import { fail, partial, pass } from "../verdict.js";
 import type { HttpTest } from "../types.js";
@@ -9,7 +9,7 @@ import type { HttpTest } from "../types.js";
  * HTTP-level tests for the "http-quick" profile. These need no browser: they exercise the proxy with
  * requests that a URL-prefix proxy (or any proxy the runner can reach) must carry faithfully.
  * Browser-only behavior (navigation, service workers, storage, WebSocket in a page) is NOT here.
- * Every test uses fresh nonces and deterministic payloads; none of them trusts a status code alone.
+ * Expected payloads are derived from the run SECRET, which never appears in anything the proxy sees.
  */
 
 function def(
@@ -28,14 +28,15 @@ export const httpQuickTests: readonly HttpTest[] = [
   {
     def: def("networking.get.001", "networking", "standard", "GET reaches the origin with method and path intact"),
     async run(ctx) {
-      const a = await attempt(ctx, ctx.target(ctx.origin1, "/echo?probe=get"));
+      const probe = ctx.param("networking.get.001");
+      const a = await attempt(ctx, ctx.target(ctx.origin1, `/echo?probe=${probe}`));
       if (isError(a)) return fail("200 + echo", a.error, "request did not complete");
       const echo = parseEcho(a.body);
       if (a.status !== 200) return fail(200, a.status, "origin status not preserved");
       if (!echo) return fail("echo JSON", "unparseable", "origin response body was not the echo document");
       if (echo.method !== "GET") return fail("GET", echo.method, "method changed");
-      if (echo.path !== "/echo?probe=get") return fail("/echo?probe=get", echo.path, "path or query changed");
-      return pass("GET /echo?probe=get", echo.path);
+      if (echo.path !== `/echo?probe=${probe}`) return fail(`/echo?probe=${probe}`, echo.path, "path or query changed");
+      return pass(`GET /echo?probe=${probe}`, echo.path);
     },
   },
   {
@@ -106,9 +107,9 @@ export const httpQuickTests: readonly HttpTest[] = [
     ),
     async run(ctx) {
       const size = 1048576;
-      const a = await attempt(ctx, ctx.target(ctx.origin1, `/large?bytes=${size}&seed=${ctx.nonce}`));
+      const a = await attempt(ctx, ctx.target(ctx.origin1, `/large?bytes=${size}`));
       if (isError(a)) return fail("body delivered", a.error, "request did not complete");
-      const expected = sha(deterministicBytes(size, ctx.nonce));
+      const expected = sha(largePayload(ctx.secret, size));
       const observed = sha(a.body);
       if (a.status !== 200) return fail(200, a.status, "status changed");
       return observed === expected
@@ -213,7 +214,7 @@ export const httpQuickTests: readonly HttpTest[] = [
     async run(ctx) {
       const a = await attempt(ctx, ctx.target(ctx.origin1, "/gzip"));
       if (isError(a)) return fail("body delivered", a.error, "request did not complete");
-      const expected = sha(gzipPayload(ctx.nonce));
+      const expected = sha(gzipPayload(ctx.secret));
       const observed = sha(a.body);
       return observed === expected
         ? pass(expected, observed)
@@ -225,7 +226,7 @@ export const httpQuickTests: readonly HttpTest[] = [
     async run(ctx) {
       const a = await attempt(ctx, ctx.target(ctx.origin1, "/range"), { headers: { range: "bytes=100-199" } });
       if (isError(a)) return fail("206 slice", a.error, "request did not complete");
-      const payload = rangePayload(ctx.nonce);
+      const payload = rangePayload(ctx.secret);
       const slice = sha(payload.subarray(100, 200));
       const observed = sha(a.body);
       if (a.status === 206 && a.headers.get("content-range") === `bytes 100-199/${payload.length}` && observed === slice) {
@@ -242,7 +243,7 @@ export const httpQuickTests: readonly HttpTest[] = [
     async run(ctx) {
       const a = await attempt(ctx, ctx.target(ctx.origin1, "/chunked"));
       if (isError(a)) return fail("body delivered", a.error, "request did not complete");
-      const expected = sha(chunkedPayload(ctx.nonce));
+      const expected = sha(chunkedPayload(ctx.secret));
       const observed = sha(a.body);
       return observed === expected
         ? pass(expected, observed)

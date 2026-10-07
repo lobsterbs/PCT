@@ -1,4 +1,4 @@
-import { hashResult, type ScoreReport } from "@pct/core";
+import { hashResult, issueRun, newSecret, type ScoreReport } from "@pct/core";
 import {
   PROBES,
   PROFILES as DETECTION_PROFILES,
@@ -9,7 +9,7 @@ import {
   type HttpSnapshot,
   type Observations,
 } from "@pct/detect";
-import { httpQuickTests, newNonce, runSuite, type HttpTest, type RunOutput } from "@pct/runner";
+import { httpQuickTests, readCapped, runSuite, type HttpTest, type RunOutput } from "@pct/runner";
 import { createTestOrigin } from "@pct/server";
 
 export const PCT_VERSION = "0.1.0";
@@ -27,8 +27,10 @@ export interface RunOptions {
   readonly originHost?: string;
   /** Second host name for cookie isolation. Default localhost. */
   readonly origin2Host?: string;
-  /** Interface the test origin binds. Default 0.0.0.0. */
+  /** Interface the test origin binds. Default 127.0.0.1. Use 0.0.0.0 only with a remote proxy. */
   readonly bindHost?: string;
+  /** Run secret. Generated when omitted. Injectable so tests can prove it never reaches the proxy. */
+  readonly secret?: string;
   /** Fixed origin port. Default: a free port. */
   readonly originPort?: number;
   readonly timeoutMs?: number;
@@ -43,6 +45,7 @@ export interface RunResult {
 }
 
 const PROBE_BODY_LIMIT = 256 * 1024;
+const RUN_TTL_MS = 60 * 60 * 1000;
 
 export function normalizeProxy(raw: string): string {
   let url: URL;
@@ -61,7 +64,8 @@ async function snapshot(
 ): Promise<{ snap: HttpSnapshot | null; status: number | null; error?: string }> {
   try {
     const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(timeoutMs) });
-    const buf = Buffer.from(await res.arrayBuffer()).subarray(0, PROBE_BODY_LIMIT);
+    // Capped: a hostile proxy cannot make a probe allocate more than PROBE_BODY_LIMIT bytes.
+    const { bytes: buf } = await readCapped(res, PROBE_BODY_LIMIT);
     const headers: Record<string, string> = {};
     for (const [k, v] of res.headers) headers[k.toLowerCase()] = v;
     return { snap: { url, status: res.status, headers, body: buf.toString("utf8") }, status: res.status };
@@ -88,11 +92,15 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
   const tests = PROFILES[profileName];
   if (!tests) throw new Error(`unknown profile "${profileName}". available: ${Object.keys(PROFILES).join(", ")}`);
   const timeoutMs = opts.timeoutMs ?? 15000;
-  const nonce = newNonce();
+  const secret = opts.secret ?? newSecret();
+  // The public run id is the session's random id. The secret stays here and in the origin.
+  const { claims } = issueRun(secret, { profile: profileName, suiteVersion: SUITE_VERSION, ttlMs: RUN_TTL_MS });
+  const nonce = claims.runId;
 
   const origin = await createTestOrigin({
     nonce,
-    bindHost: opts.bindHost ?? "0.0.0.0",
+    secret,
+    bindHost: opts.bindHost ?? "127.0.0.1",
     ...(opts.originPort !== undefined ? { port: opts.originPort } : {}),
   });
   try {
@@ -104,6 +112,7 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       origin1,
       origin2,
       nonce,
+      secret,
       timeoutMs,
       profile: profileName,
       suiteVersion: SUITE_VERSION,
@@ -138,6 +147,8 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       proxy: { url: proxyBase },
       declared: opts.engine ? { engine: opts.engine, version: opts.engineVersion ?? null } : null,
       run: {
+        id: claims.runId,
+        expiresAt: new Date(claims.expiresAt).toISOString(),
         startedAt: run.startedAt,
         finishedAt: run.finishedAt,
         reachable: run.reachable,
