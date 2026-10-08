@@ -279,6 +279,15 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
         res.writeHead(204);
         return res.end();
 
+      case "/security-headers":
+        res.writeHead(200, {
+          "content-type": "text/plain",
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "x-frame-options": "DENY",
+        });
+        return res.end("sec");
+
       case "/csp":
         res.writeHead(200, { "content-type": "text/html", "content-security-policy": cspFor(nonce) });
         return res.end("<!doctype html><title>csp</title>");

@@ -414,6 +414,17 @@ fn handle(mut req: Request, st: &State) -> Result<(), String> {
             b"cc".to_vec(),
         ),
         "/no-content" => send(req, 204, Vec::new(), Box::new(Cursor::new(Vec::new())), Some(0)),
+        "/security-headers" => send_bytes(
+            req,
+            200,
+            vec![
+                ("content-type".into(), "text/plain".into()),
+                ("x-content-type-options".into(), "nosniff".into()),
+                ("referrer-policy".into(), "no-referrer".into()),
+                ("x-frame-options".into(), "DENY".into()),
+            ],
+            b"sec".to_vec(),
+        ),
         "/csp" => send_bytes(
             req,
             200,

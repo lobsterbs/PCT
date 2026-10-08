@@ -257,5 +257,139 @@ const httpStandardBatch1: readonly HttpTest[] = [
   },
 ];
 
-/** Batch 1 of the Standard HTTP profile, appended after the 19 http-quick tests. */
-export const httpStandardTests: readonly HttpTest[] = [...httpQuickTests, ...httpStandardBatch1];
+
+const httpStandardBatch2: readonly HttpTest[] = [
+  {
+    def: def("networking.status-201.001", "networking", "standard", "201 Created passes through"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/status?code=201"));
+      if (isError(a)) return fail(201, a.error, "request did not complete");
+      return a.status === 201 ? pass(201, 201) : fail(201, a.status, "status code rewritten");
+    },
+  },
+  {
+    def: def("networking.status-404.001", "networking", "standard", "404 Not Found passes through"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/status?code=404"));
+      if (isError(a)) return fail(404, a.error, "request did not complete");
+      return a.status === 404 ? pass(404, 404) : fail(404, a.status, "status code rewritten");
+    },
+  },
+  {
+    def: def("networking.status-503.001", "networking", "standard", "503 Service Unavailable passes through"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/status?code=503"));
+      if (isError(a)) return fail(503, a.error, "request did not complete");
+      return a.status === 503 ? pass(503, 503) : fail(503, a.status, "status code rewritten");
+    },
+  },
+  {
+    def: def("networking.redirect-308-post.001", "networking", "standard", "308 redirect preserves method and body"),
+    async run(ctx) {
+      const payload = `pct-308-${ctx.nonce}`;
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/redirect?hops=1&code=308"), {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: payload,
+      });
+      if (isError(a)) return fail("POST preserved", a.error, "redirect did not complete");
+      const echo = parseEcho(a.body);
+      if (!echo) return fail("echo JSON", "unparseable", "final hop did not return an echo");
+      if (echo.method !== "POST") return fail("POST", echo.method, "method changed across a 308 redirect");
+      return echo.bodySha256 === sha(payload)
+        ? pass("POST with identical body", "POST, body intact")
+        : fail(sha(payload), echo.bodySha256, "body changed across a 308 redirect");
+    },
+  },
+  {
+    def: def("networking.redirect-depth-10.001", "networking", "standard", "A ten-hop redirect chain completes"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/redirect?hops=10&code=302"));
+      if (isError(a)) return fail("chain completes", a.error, "redirect chain did not complete");
+      const echo = parseEcho(a.body);
+      if (a.status !== 200 || !echo) return fail(200, a.status, "redirect chain did not end on a 200");
+      return echo.path.startsWith("/redirect?hops=0")
+        ? pass("final hop reached", echo.path)
+        : fail("final hop reached", echo.path, "redirect chain ended somewhere unexpected");
+    },
+  },
+  {
+    def: def("cookies.attributes-passthrough.001", "cookies", "standard", "Set-Cookie attributes HttpOnly and SameSite survive"),
+    async run(ctx) {
+      const value = ctx.nonce.replace(/[^A-Za-z0-9_-]/g, "");
+      const a = await attempt(ctx, ctx.target(ctx.origin1, `/set-cookie?name=pctattr&value=${value}`));
+      if (isError(a)) return fail("Set-Cookie delivered", a.error, "request did not complete");
+      const cookie = a.headers.getSetCookie().join("; ");
+      const httpOnly = /;\s*httponly/i.test(cookie);
+      const sameSite = /samesite=lax/i.test(cookie);
+      if (httpOnly && sameSite) return pass("HttpOnly; SameSite=Lax", cookie);
+      if (httpOnly || sameSite) return partial("HttpOnly; SameSite=Lax", cookie, "only one cookie attribute preserved");
+      return fail("HttpOnly; SameSite=Lax", cookie || null, "cookie attributes dropped");
+    },
+  },
+  {
+    def: def("security.headers-passthrough.001", "security", "standard", "nosniff, Referrer-Policy and X-Frame-Options survive"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/security-headers"));
+      if (isError(a)) return fail("3 security headers", a.error, "request did not complete");
+      const checks: Array<[string, string]> = [
+        ["x-content-type-options", "nosniff"],
+        ["referrer-policy", "no-referrer"],
+        ["x-frame-options", "DENY"],
+      ];
+      const kept = checks.filter(([h, v]) => a.headers.get(h) === v).length;
+      if (kept === 3) return pass(3, 3);
+      if (kept > 0) return partial(3, kept, `${3 - kept} security header(s) dropped or altered`);
+      return fail(3, 0, "security headers dropped");
+    },
+  },
+  {
+    def: def("networking.empty-query-value.001", "networking", "standard", "A query parameter with an empty value keeps its name"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/echo?empty="));
+      if (isError(a)) return fail("/echo?empty=", a.error, "request did not complete");
+      const echo = parseEcho(a.body);
+      if (!echo) return fail("echo JSON", "unparseable", "origin response body was not the echo document");
+      return echo.path === "/echo?empty="
+        ? pass("/echo?empty=", echo.path)
+        : fail("/echo?empty=", echo.path, "empty query value changed");
+    },
+  },
+  {
+    def: def("networking.unicode-query.001", "networking", "standard", "A percent-encoded non-ASCII query value arrives unchanged"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/echo?q=%C3%A9"));
+      if (isError(a)) return fail("/echo?q=%C3%A9", a.error, "request did not complete");
+      const echo = parseEcho(a.body);
+      if (!echo) return fail("echo JSON", "unparseable", "origin response body was not the echo document");
+      return echo.path === "/echo?q=%C3%A9"
+        ? pass("/echo?q=%C3%A9", echo.path)
+        : fail("/echo?q=%C3%A9", echo.path, "percent-encoded query value changed");
+    },
+  },
+  {
+    def: def("networking.accept-header.001", "networking", "standard", "A custom Accept header reaches the origin unchanged"),
+    async run(ctx) {
+      const accept = "application/pct-accept";
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/echo"), { headers: { accept } });
+      if (isError(a)) return fail("header delivered", a.error, "request did not complete");
+      const echo = parseEcho(a.body);
+      const got = echo?.headers["accept"];
+      return got === accept ? pass(accept, got) : fail(accept, got ?? null, "Accept header was dropped or replaced");
+    },
+  },
+  {
+    def: def("networking.content-type.001", "networking", "standard", "Content-Type with a charset parameter passes through"),
+    async run(ctx) {
+      const a = await attempt(ctx, ctx.target(ctx.origin1, "/html"));
+      if (isError(a)) return fail("text/html; charset=utf-8", a.error, "request did not complete");
+      const ct = a.headers.get("content-type") ?? "";
+      if (ct === "text/html; charset=utf-8") return pass("text/html; charset=utf-8", ct);
+      if (ct.startsWith("text/html")) return partial("text/html; charset=utf-8", ct, "charset parameter altered");
+      return fail("text/html; charset=utf-8", ct || null, "Content-Type dropped or changed");
+    },
+  },
+];
+
+/** The http-standard profile so far: the 19 http-quick tests, then batch 1 and batch 2. Same order as Rust. */
+export const httpStandardTests: readonly HttpTest[] = [...httpQuickTests, ...httpStandardBatch1, ...httpStandardBatch2];

@@ -83,7 +83,7 @@ the content checks cover that.
 - Rust runner coverage is the http-quick profile only. Browser-level tests exist in neither language.
 - Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
 - Automated tests for the result viewer. It has been checked in headless Chromium by screenshot, not by a test suite.
-- The Standard and Full profiles. `http-quick` (19 tests) and the first batch of `http-standard` (37 tests in total) exist. The spec's Standard target is about 100 and Full is 150 to 250.
+- The Standard and Full profiles. `http-quick` (19 tests) and the first two batches of `http-standard` (48 tests in total) exist. The spec's Standard target is about 100 and Full is 150 to 250.
 - Benchmarking arbitrary user-supplied proxy URLs from the hosted service (needs SSRF guards).
 
 ## Deployment

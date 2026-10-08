@@ -663,7 +663,165 @@ fn networking_repeated_query_001(ctx: &mut Ctx) -> Verdict {
     }
 }
 
-/// The http-standard profile so far: the 19 http-quick tests, then batch 1 (18 tests). Same order as the TypeScript side.
+// ---- Batch 2 of the Standard HTTP profile. Mirrors packages/runner/src/tests/http-standard.ts. ----
+
+fn status_test(ctx: &mut Ctx, code: u16) -> Verdict {
+    let url = ctx.t1(&format!("/status?code={code}"));
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!(code), "request did not complete"));
+    if r.status == code {
+        pass(json!(code), json!(code))
+    } else {
+        fail(json!(code), json!(r.status), "status code rewritten")
+    }
+}
+
+fn networking_status_201_001(ctx: &mut Ctx) -> Verdict {
+    status_test(ctx, 201)
+}
+
+fn networking_status_404_001(ctx: &mut Ctx) -> Verdict {
+    status_test(ctx, 404)
+}
+
+fn networking_status_503_001(ctx: &mut Ctx) -> Verdict {
+    status_test(ctx, 503)
+}
+
+fn networking_redirect_308_post_001(ctx: &mut Ctx) -> Verdict {
+    let payload = format!("pct-308-{}", ctx.nonce);
+    let url = ctx.t1("/redirect?hops=1&code=308");
+    let a = ctx.attempt(&url, Opts::get().method("POST").header("content-type", "text/plain").body(payload.clone().into_bytes()));
+    let r = tri!(reply_or(a, json!("POST preserved"), "redirect did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "final hop did not return an echo"));
+    if echo.method != "POST" {
+        return fail(json!("POST"), json!(echo.method), "method changed across a 308 redirect");
+    }
+    if echo.body_sha256 == sha(payload.as_bytes()) {
+        pass(json!("POST with identical body"), json!("POST, body intact"))
+    } else {
+        fail(json!(sha(payload.as_bytes())), json!(echo.body_sha256), "body changed across a 308 redirect")
+    }
+}
+
+fn networking_redirect_depth_10_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/redirect?hops=10&code=302");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("chain completes"), "redirect chain did not complete"));
+    let echo = parse_echo(&r.body);
+    let echo = match echo {
+        Some(e) if r.status == 200 => e,
+        _ => return fail(json!(200), json!(r.status), "redirect chain did not end on a 200"),
+    };
+    if echo.path.starts_with("/redirect?hops=0") {
+        pass(json!("final hop reached"), json!(echo.path))
+    } else {
+        fail(json!("final hop reached"), json!(echo.path), "redirect chain ended somewhere unexpected")
+    }
+}
+
+fn cookies_attributes_passthrough_001(ctx: &mut Ctx) -> Verdict {
+    let value: String = ctx.nonce.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
+    let url = ctx.t1(&format!("/set-cookie?name=pctattr&value={value}"));
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("Set-Cookie delivered"), "request did not complete"));
+    let cookie = r.set_cookies().join("; ");
+    let lower = cookie.to_ascii_lowercase();
+    let http_only = lower.contains(";httponly") || lower.contains("; httponly");
+    let same_site = lower.contains("samesite=lax");
+    if http_only && same_site {
+        pass(json!("HttpOnly; SameSite=Lax"), json!(cookie))
+    } else if http_only || same_site {
+        partial(json!("HttpOnly; SameSite=Lax"), json!(cookie), "only one cookie attribute preserved")
+    } else {
+        fail(json!("HttpOnly; SameSite=Lax"), if cookie.is_empty() { Value::Null } else { json!(cookie) }, "cookie attributes dropped")
+    }
+}
+
+fn security_headers_passthrough_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/security-headers");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("3 security headers"), "request did not complete"));
+    let checks = [("x-content-type-options", "nosniff"), ("referrer-policy", "no-referrer"), ("x-frame-options", "DENY")];
+    let kept = checks.iter().filter(|(h, v)| r.get(h).as_deref() == Some(*v)).count();
+    if kept == 3 {
+        pass(json!(3), json!(3))
+    } else if kept > 0 {
+        partial(json!(3), json!(kept), &format!("{} security header(s) dropped or altered", 3 - kept))
+    } else {
+        fail(json!(3), json!(0), "security headers dropped")
+    }
+}
+
+fn networking_empty_query_value_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/echo?empty=");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("/echo?empty="), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin response body was not the echo document"));
+    if echo.path == "/echo?empty=" {
+        pass(json!("/echo?empty="), json!(echo.path))
+    } else {
+        fail(json!("/echo?empty="), json!(echo.path), "empty query value changed")
+    }
+}
+
+fn networking_unicode_query_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/echo?q=%C3%A9");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("/echo?q=%C3%A9"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin response body was not the echo document"));
+    if echo.path == "/echo?q=%C3%A9" {
+        pass(json!("/echo?q=%C3%A9"), json!(echo.path))
+    } else {
+        fail(json!("/echo?q=%C3%A9"), json!(echo.path), "percent-encoded query value changed")
+    }
+}
+
+fn networking_accept_header_001(ctx: &mut Ctx) -> Verdict {
+    let accept = "application/pct-accept";
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().header("accept", accept));
+    let r = tri!(reply_or(a, json!("header delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    match echo.headers.get("accept") {
+        Some(got) if got == accept => pass(json!(accept), json!(got)),
+        got => fail(json!(accept), json!(got), "Accept header was dropped or replaced"),
+    }
+}
+
+fn networking_content_type_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/html");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("text/html; charset=utf-8"), "request did not complete"));
+    let ct = r.get("content-type").unwrap_or_default();
+    if ct == "text/html; charset=utf-8" {
+        pass(json!("text/html; charset=utf-8"), json!(ct))
+    } else if ct.starts_with("text/html") {
+        partial(json!("text/html; charset=utf-8"), json!(ct), "charset parameter altered")
+    } else {
+        fail(json!("text/html; charset=utf-8"), if ct.is_empty() { Value::Null } else { json!(ct) }, "Content-Type dropped or changed")
+    }
+}
+
+fn http_standard_batch2() -> Vec<HttpTest> {
+    use CategoryId as C;
+    use Tier::Standard;
+    vec![
+        HttpTest { def: def("networking.status-201.001", C::Networking, Standard, "201 Created passes through", false), run: networking_status_201_001 },
+        HttpTest { def: def("networking.status-404.001", C::Networking, Standard, "404 Not Found passes through", false), run: networking_status_404_001 },
+        HttpTest { def: def("networking.status-503.001", C::Networking, Standard, "503 Service Unavailable passes through", false), run: networking_status_503_001 },
+        HttpTest { def: def("networking.redirect-308-post.001", C::Networking, Standard, "308 redirect preserves method and body", false), run: networking_redirect_308_post_001 },
+        HttpTest { def: def("networking.redirect-depth-10.001", C::Networking, Standard, "A ten-hop redirect chain completes", false), run: networking_redirect_depth_10_001 },
+        HttpTest { def: def("cookies.attributes-passthrough.001", C::Cookies, Standard, "Set-Cookie attributes HttpOnly and SameSite survive", false), run: cookies_attributes_passthrough_001 },
+        HttpTest { def: def("security.headers-passthrough.001", C::Security, Standard, "nosniff, Referrer-Policy and X-Frame-Options survive", false), run: security_headers_passthrough_001 },
+        HttpTest { def: def("networking.empty-query-value.001", C::Networking, Standard, "A query parameter with an empty value keeps its name", false), run: networking_empty_query_value_001 },
+        HttpTest { def: def("networking.unicode-query.001", C::Networking, Standard, "A percent-encoded non-ASCII query value arrives unchanged", false), run: networking_unicode_query_001 },
+        HttpTest { def: def("networking.accept-header.001", C::Networking, Standard, "A custom Accept header reaches the origin unchanged", false), run: networking_accept_header_001 },
+        HttpTest { def: def("networking.content-type.001", C::Networking, Standard, "Content-Type with a charset parameter passes through", false), run: networking_content_type_001 },
+    ]
+}
+
+/// The http-standard profile so far: the 19 http-quick tests, then batch 1 and batch 2. Same order as the TypeScript side.
 pub fn http_standard_tests() -> Vec<HttpTest> {
     use CategoryId as C;
     use Tier::{Edge, Standard};
@@ -688,6 +846,7 @@ pub fn http_standard_tests() -> Vec<HttpTest> {
         HttpTest { def: def("networking.status-500.001", C::Networking, Standard, "Server error status 500 passes through", false), run: networking_status_500_001 },
         HttpTest { def: def("networking.repeated-query.001", C::Networking, Standard, "Repeated query parameters keep both values in order", false), run: networking_repeated_query_001 },
     ]);
+    v.extend(http_standard_batch2());
     v
 }
 
