@@ -3,7 +3,7 @@
 //! Behaviour matches packages/reference-proxy/src/proxy.ts, including the nine named breakages.
 //! Known difference: responses are buffered, not streamed. Stream-dependent tests still see the same bytes.
 
-use std::io::{Cursor, Read};
+use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;

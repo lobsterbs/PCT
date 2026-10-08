@@ -1,0 +1,19 @@
+[package]
+name = "pct-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+description = "PCT HTTP-level runner in Rust. Runs the http-quick profile; behaviour matches packages/runner (TypeScript) and is checked against it by scripts/verify-rust-runner.mjs."
+
+# Rust 1.75: run `cargo update -p idna_adapter --precise 1.1.0` once before building (see pct-proxy/Cargo.toml).
+# ureq is built without TLS: this runner reaches http:// proxies and origins only. https proxies need the TypeScript runner.
+[[bin]]
+name = "pct-run"
+path = "src/main.rs"
+
+[dependencies]
+pct-core = { path = "../pct-core" }
+ureq = { version = "2", default-features = false }
+flate2 = "1"
+serde_json = "1"

@@ -4,7 +4,8 @@ PCT measures how faithfully a web proxy carries HTTP traffic, and reports what i
 proxy's engine. It is a behavioral benchmark: it checks what the proxy does, not what it claims to be.
 
 **Status: early.** The end-to-end benchmark (runner, test origin, reference proxy, CLI, hosted service) runs in
-TypeScript. Rust ports of the origin and reference proxy are verified; the Rust runner is in progress. See "Not built yet".
+TypeScript. Rust ports of the origin, the reference proxy and the http-quick runner are verified against the TypeScript
+side. The Rust detection profiles and CLI are not built. See "Not built yet".
 
 ## What works today
 
@@ -23,6 +24,7 @@ TypeScript. Rust ports of the origin and reference proxy are verified; the Rust 
 | Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
 | Rust test origin (`pct-origin`) | pct-rs/crates/pct-origin | built; TypeScript runner passes 19/19 against it |
 | Rust reference proxy (`pct-proxy`) | pct-rs/crates/pct-proxy | built; all 9 breakages verified against the TypeScript runner |
+| Rust HTTP runner (`pct-run`, http-quick) | pct-rs/crates/pct-runner | built; same statuses as the TypeScript runner on the correct proxy and all 9 breakages (scripts/verify-rust-runner.mjs). Plain http only, no TLS |
 | Rust core (parity with TypeScript) | pct-rs/crates/pct-core | built, parity-tested |
 
 130 tests pass with `npm test`.
@@ -76,7 +78,9 @@ the content checks cover that.
 
 ## Not built yet
 
-- The Rust runner (the 19 HTTP tests, the suite, and receipt checks), the Rust detection profiles, and the Rust CLI.
+- The Rust detection profiles and the Rust CLI.
+- TLS in the Rust runner. https proxies and origins need the TypeScript runner for now.
+- Rust runner coverage is the http-quick profile only. Browser-level tests exist in neither language.
 - Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
 - Automated tests for the result viewer. It has been checked in headless Chromium by screenshot, not by a test suite.
 - The Standard and Full profiles. Only `http-quick` exists.
