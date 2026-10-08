@@ -19,7 +19,9 @@ export interface RunContext {
   /** Run secret. Never appears in anything sent through the proxy. */
   readonly secret: string;
   readonly timeoutMs: number;
-  /** Builds the proxied URL for a path on a test origin. */
+  /** Receipt ids issued so far in this run, in order. The suite checks each one reached the origin. */
+  readonly issued: string[];
+  /** Builds the proxied URL for a path on a test origin. Each call issues a fresh receipt id. */
   target(origin: string, path: string): string;
   /** A parameter unique to this run and this test. Derived from the secret, so it cannot be predicted from earlier runs. */
   param(testId: string): string;

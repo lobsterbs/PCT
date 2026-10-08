@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { gzipSync } from "node:zlib";
 import { deterministicBytes, sha256Hex } from "./payload.js";
@@ -30,6 +31,21 @@ export const RANGE_PAYLOAD_SIZE = 10240;
 export const GZIP_PAYLOAD_SIZE = 4096;
 export const CHUNKED_CHUNK_SIZE = 4096;
 export const CHUNKED_CHUNK_COUNT = 16;
+
+/** Receipt ids are 16 lowercase hex characters, issued by the runner for each request it sends. */
+const RECEIPT = /^[0-9a-f]{16}$/;
+/** Name of the query parameter that carries a receipt id. Stripped from echoes and carried into redirects. */
+export const RECEIPT_PARAM = "pct";
+
+/** The control auth for a receipt: HMAC(secret, "ledger:"+id). Same derivation as the runner's derive(). */
+export function ledgerAuth(secret: string, id: string): string {
+  return createHmac("sha256", secret).update(`ledger:${id}`, "utf8").digest("hex");
+}
+
+function authOk(given: string | undefined, expected: string): boolean {
+  if (!given || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+}
 
 export const cspFor = (nonce: string): string =>
   `default-src 'self'; script-src 'self' 'nonce-${nonce}'; object-src 'none'`;
@@ -77,10 +93,14 @@ function sendJson(res: ServerResponse, status: number, body: unknown, extra: Rec
   res.end(JSON.stringify(body));
 }
 
+/** The echoed path omits the receipt parameter, so echo tests see the URL they meant to send. */
 function echoBody(req: IncomingMessage, url: URL, body: Buffer) {
+  const visible = new URLSearchParams(url.search);
+  visible.delete(RECEIPT_PARAM);
+  const search = visible.toString() ? `?${visible.toString()}` : "";
   return {
     method: req.method ?? "",
-    path: url.pathname + url.search,
+    path: url.pathname + search,
     headers: flatHeaders(req),
     bodyLength: body.length,
     bodySha256: sha256Hex(body),
@@ -92,12 +112,26 @@ const VALUE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
   const { nonce, secret } = opts;
+  // Ids of every request this origin served. A request is only recorded here if it actually reached the origin.
+  const ledger = new Set<string>();
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<unknown> => {
     const url = new URL(req.url ?? "/", "http://pct.invalid");
+    const receipt = url.searchParams.get(RECEIPT_PARAM);
+    if (receipt && RECEIPT.test(receipt)) ledger.add(receipt);
     const body = await readBody(req);
 
     switch (url.pathname) {
+      case "/__pct/ledger": {
+        // Control endpoint for the runner's direct channel. The proxy never holds the run secret, so it cannot
+        // ask for receipts it did not earn. Auth is checked before anything is revealed.
+        const id = url.searchParams.get("id") ?? "";
+        if (!RECEIPT.test(id) || !authOk(req.headers["x-pct-auth"] as string | undefined, ledgerAuth(secret, id))) {
+          return sendJson(res, 403, { error: "forbidden" });
+        }
+        return sendJson(res, ledger.has(id) ? 200 : 404, { seen: ledger.has(id) });
+      }
+
       case "/echo":
         return sendJson(res, 200, echoBody(req, url, body));
 
@@ -107,8 +141,9 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
         if (!Number.isInteger(hops) || hops < 0 || hops > 10) return sendJson(res, 400, { error: "hops" });
         if (![301, 302, 303, 307, 308].includes(code)) return sendJson(res, 400, { error: "code" });
         if (hops > 0) {
-          // Absolute Location built from the Host header the proxy forwards.
-          const location = `http://${req.headers.host ?? "localhost"}/redirect?hops=${hops - 1}&code=${code}`;
+          // Absolute Location built from the Host header the proxy forwards. The receipt is carried so the next hop is recorded.
+          const carried = receipt && RECEIPT.test(receipt) ? `&${RECEIPT_PARAM}=${receipt}` : "";
+          const location = `http://${req.headers.host ?? "localhost"}/redirect?hops=${hops - 1}&code=${code}${carried}`;
           res.writeHead(code, { location });
           return res.end();
         }

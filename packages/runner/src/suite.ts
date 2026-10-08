@@ -1,4 +1,4 @@
-import { buildManifest, computeScore, redact, type Manifest, type ScoreReport, type TestResult } from "@pct/core";
+import { buildManifest, computeScore, derive, redact, type Manifest, type ScoreReport, type TestResult } from "@pct/core";
 import { makeContext } from "./context.js";
 import type { HttpTest, RunContext } from "./types.js";
 
@@ -38,12 +38,60 @@ async function checkReachable(ctx: RunContext): Promise<{ ok: boolean; detail: s
   }
 }
 
+/**
+ * Receipts: asks the origin, over the runner's direct channel, whether it served each id. Returns the ids it
+ * never saw. The proxy cannot forge a receipt without contacting the origin, and it does not hold the secret.
+ */
+async function unseenReceipts(ctx: RunContext, ids: string[]): Promise<string[]> {
+  const missing: string[] = [];
+  for (const id of ids) {
+    const res = await fetch(`${ctx.origin1}/__pct/ledger?id=${id}`, {
+      headers: { "x-pct-auth": derive(ctx.secret, `ledger:${id}`) },
+      signal: AbortSignal.timeout(ctx.timeoutMs),
+    });
+    await res.body?.cancel();
+    if (res.status === 404) missing.push(id);
+    else if (res.status !== 200) throw new Error(`ledger check returned HTTP ${res.status}`);
+  }
+  return missing;
+}
+
 async function runOne(test: HttpTest, ctx: RunContext): Promise<TestResult> {
   const started = performance.now();
   const id = test.def.id;
   const durationMs = () => Math.round(performance.now() - started);
+  const mark = ctx.issued.length;
   try {
     const v = await test.run(ctx);
+    const missing = await unseenReceipts(ctx, ctx.issued.slice(mark));
+    if (missing.length > 0) {
+      const receiptNote = `The origin never received ${missing.length} of this test's request(s), so the response was not produced by the origin.`;
+      if (v.status !== "fail") {
+        // A passing or partial result without origin contact is not evidence of compatibility.
+        return {
+          id,
+          status: "fail",
+          durationMs: durationMs(),
+          diagnostics: redact({
+            expected: "every request reached the origin",
+            observed: `${missing.length} request(s) never reached the origin`,
+            explanation: receiptNote,
+          }) as { expected?: unknown; observed?: unknown; explanation?: string },
+        };
+      }
+      // Already failing: keep the test's own evidence and add the receipt finding to it.
+      const explanation = [v.explanation, receiptNote].filter(Boolean).join(" ");
+      return {
+        id,
+        status: "fail",
+        durationMs: durationMs(),
+        diagnostics: redact({ expected: v.expected, observed: v.observed, explanation }) as {
+          expected?: unknown;
+          observed?: unknown;
+          explanation?: string;
+        },
+      };
+    }
     const diagnostics = redact({ expected: v.expected, observed: v.observed, explanation: v.explanation }) as {
       expected?: unknown;
       observed?: unknown;
