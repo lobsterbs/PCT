@@ -1,6 +1,6 @@
 import { buildManifest, computeScore, derive, redact, type Manifest, type ScoreReport, type TestResult } from "@pct/core";
 import { makeContext } from "./context.js";
-import type { HttpTest, RunContext } from "./types.js";
+import type { HttpTest, RunContext, Verdict } from "./types.js";
 
 export interface RunOptions {
   readonly proxyBase: string;
@@ -42,7 +42,7 @@ async function checkReachable(ctx: RunContext): Promise<{ ok: boolean; detail: s
  * Receipts: asks the origin, over the runner's direct channel, whether it served each id. Returns the ids it
  * never saw. The proxy cannot forge a receipt without contacting the origin, and it does not hold the secret.
  */
-async function unseenReceipts(ctx: RunContext, ids: string[]): Promise<string[]> {
+export async function unseenReceipts(ctx: RunContext, ids: string[]): Promise<string[]> {
   const missing: string[] = [];
   for (const id of ids) {
     const res = await fetch(`${ctx.origin1}/__pct/ledger?id=${id}`, {
@@ -56,13 +56,17 @@ async function unseenReceipts(ctx: RunContext, ids: string[]): Promise<string[]>
   return missing;
 }
 
-async function runOne(test: HttpTest, ctx: RunContext): Promise<TestResult> {
+/** Runs one test body and applies the receipt rule. Shared by the HTTP and browser suites. */
+export async function runOne(
+  id: string,
+  body: (ctx: RunContext) => Promise<Verdict>,
+  ctx: RunContext,
+): Promise<TestResult> {
   const started = performance.now();
-  const id = test.def.id;
   const durationMs = () => Math.round(performance.now() - started);
   const mark = ctx.issued.length;
   try {
-    const v = await test.run(ctx);
+    const v = await body(ctx);
     const missing = await unseenReceipts(ctx, ctx.issued.slice(mark));
     if (missing.length > 0) {
       const receiptNote = `The origin never received ${missing.length} of this test's request(s), so the response was not produced by the origin.`;
@@ -126,7 +130,7 @@ export async function runSuite(opts: RunOptions): Promise<RunOutput> {
     }));
   } else {
     results = [];
-    for (const test of opts.tests) results.push(await runOne(test, ctx));
+    for (const test of opts.tests) results.push(await runOne(test.def.id, (c) => test.run(c), ctx));
   }
 
   const report = computeScore({

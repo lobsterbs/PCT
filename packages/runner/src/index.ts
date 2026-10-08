@@ -5,3 +5,5 @@ export * from "./verdict.js";
 export * from "./suite.js";
 export * from "./tests/http-quick.js";
 export * from "./tests/http-standard.js";
+export * from "./browser-suite.js";
+export * from "./tests/browser-quick.js";

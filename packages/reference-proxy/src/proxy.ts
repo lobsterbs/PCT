@@ -63,7 +63,10 @@ export function startReferenceProxy(opts: ReferenceProxyOptions): Promise<Refere
   const leakJar: { value?: string } = {};
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const raw = (req.url ?? "").slice(1);
+    // Two request forms. URL-prefix: /<absolute target>. Forward (what a browser sends to a proxy set with
+    // --proxy-server): the absolute target itself as the request target.
+    const forward = (req.url ?? "").startsWith("http://") || (req.url ?? "").startsWith("https://");
+    const raw = forward ? (req.url ?? "") : (req.url ?? "").slice(1);
     let target: URL;
     try {
       target = new URL(raw);
@@ -113,7 +116,10 @@ export function startReferenceProxy(opts: ReferenceProxyOptions): Promise<Refere
     }
 
     const location = upstream.headers.get("location");
-    if (location && upstream.status >= 300 && upstream.status < 400) {
+    if (location && upstream.status >= 300 && upstream.status < 400 && forward) {
+      // A forward proxy passes Location through: the browser sends the next hop through the proxy itself.
+      if (!breaks.has("mangle-location")) out["location"] = location;
+    } else if (location && upstream.status >= 300 && upstream.status < 400) {
       const proxyBase = `http://${req.headers.host ?? "localhost"}/`;
       // mangle-location: Location dropped entirely. raw-location: origin URL passed through,
       // so the client navigates to the origin and bypasses the proxy.

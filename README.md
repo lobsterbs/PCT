@@ -21,6 +21,7 @@ side. The Rust detection profiles and CLI are not built. See "Not built yet".
 | `pct run` CLI | packages/cli | built, tested |
 | Result viewer (dark theme, Material 3 Expressive) | packages/web | built, checked in headless Chromium; no automated viewer tests yet |
 | Static site build | scripts/build-static.mjs | built, checked in headless Chromium |
+| Browser tier (`browser-quick`, 5 tests, real Chromium through the forward proxy) | packages/runner (browser-suite.ts) | built; all pass on the correct proxy and the expected breakages are caught (scripts/verify-browser.mjs; needs a Chromium binary, set PCT_CHROME) |
 | Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
 | Rust test origin (`pct-origin`) | pct-rs/crates/pct-origin | built; TypeScript runner passes 19/19 against it |
 | Rust reference proxy (`pct-proxy`) | pct-rs/crates/pct-proxy | built; all 9 breakages verified against the TypeScript runner |
@@ -80,8 +81,8 @@ the content checks cover that.
 
 - The Rust detection profiles and the Rust CLI.
 - TLS in the Rust runner. https proxies and origins need the TypeScript runner for now.
-- Rust runner coverage is the http-quick profile only. Browser-level tests exist in neither language.
-- Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
+- The Rust runner covers the HTTP profiles only. The browser tier has no Rust port yet.
+- Browser tier: `browser-quick` (5 tests: navigation, redirects in the browser, cookie isolation, localStorage isolation, fetch from a page) runs in TypeScript only. Service workers, WebSocket in a page and the rest of the browser categories are not built.
 - Automated tests for the result viewer. It has been checked in headless Chromium by screenshot, not by a test suite.
 - The Standard and Full profiles. `http-quick` (19 tests) and the first two batches of `http-standard` (48 tests in total) exist. The spec's Standard target is about 100 and Full is 150 to 250.
 - Benchmarking arbitrary user-supplied proxy URLs from the hosted service (needs SSRF guards).
