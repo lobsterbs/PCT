@@ -3,8 +3,8 @@
 PCT measures how faithfully a web proxy carries HTTP traffic, and reports what it can see about the
 proxy's engine. It is a behavioral benchmark: it checks what the proxy does, not what it claims to be.
 
-**Status: early.** The end-to-end benchmark (runner, test origin, reference proxy, CLI) runs in TypeScript.
-The Rust port covers the core layer only. Browser-level tests are not built. See "Not built yet".
+**Status: early.** The end-to-end benchmark (runner, test origin, reference proxy, CLI, hosted service) runs in
+TypeScript. The Rust port covers the core layer only. Browser-level tests are not built. See "Not built yet".
 
 ## What works today
 
@@ -20,9 +20,10 @@ The Rust port covers the core layer only. Browser-level tests are not built. See
 | `pct run` CLI | packages/cli | built, tested |
 | Result viewer (Material 3 Expressive) | packages/web | built, DOM-tested |
 | Static site build | scripts/build-static.mjs | built, served locally |
+| Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
 | Rust core (parity with TypeScript) | pct-rs/crates/pct-core | built, parity-tested |
 
-123 tests pass with `npm test`.
+128 tests pass with `npm test`.
 
 ## Quick start
 
@@ -73,12 +74,22 @@ That is inherent to running code on a machine you do not control. Hosted mode is
 - Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
 - The Standard and Full profiles. Only `http-quick` exists.
 - Origin receipts: the origin logs each request it serves, so a proxy that never contacts it can be caught.
-- A hosted run server that holds the secret.
+- Benchmarking arbitrary user-supplied proxy URLs from the hosted service (needs SSRF guards).
 
 ## Deployment
 
-The result viewer is deployed as a static site on Render (`pct-viewer`). It loads only same-origin result
-files. The benchmark itself cannot run on a static host, because it needs a live proxy and a test origin.
+Render service `pct-host` (web service, free plan, Oregon) runs the whole hosted part from one build:
+it serves the result viewer and runs benchmarks against the built-in reference proxy.
+
+    GET /                          the result viewer
+    GET /api/run?breaks=a,b        runs the suite against the reference proxy with up to 3 breakages
+    GET /healthz                   health check
+
+Limits: one run at a time, 10 runs per client address per minute, nothing written to disk or logged.
+The hosted service never fetches a user-supplied URL. Benchmarking an arbitrary proxy from the host
+needs SSRF guards that are not built. Run the CLI on your own machine for that.
+
+An earlier static deployment, `pct-viewer`, serves the viewer alone and can be removed.
 
 ## Legal
 
