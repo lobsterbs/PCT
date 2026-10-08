@@ -1,0 +1,15 @@
+[package]
+name = "pct-proxy"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+description = "PCT reference URL-prefix proxy in Rust. Fixture with named breakages; behaviour matches packages/reference-proxy (TypeScript)."
+
+# Rust 1.75 (the apt toolchain here): run once after cloning, before building:
+#   cargo update -p idna_adapter --precise 1.1.0
+# Newer idna_adapter releases require edition 2024.
+[dependencies]
+tiny_http = "0.12"
+ureq = { version = "2", default-features = false }
+flate2 = "1"
