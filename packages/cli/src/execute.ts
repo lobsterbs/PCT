@@ -81,9 +81,9 @@ export async function collectProbes(proxyBase: string, originBase: string, timeo
     ...PROBES.map((p) => new URL(p, proxyBase).href),
     `${proxyBase}http://127.0.0.1:1/`,
   ];
-  const results = [];
-  for (const url of targets) results.push({ url, ...(await snapshot(url, timeoutMs)) });
-  return results;
+  // Probes are read-only and independent, so they run in parallel. Serial probes would wait for the sum of
+  // every timeout when the proxy hangs (15 probes at 15 s each is about four minutes). Order is preserved.
+  return Promise.all(targets.map(async (url) => ({ url, ...(await snapshot(url, timeoutMs)) })));
 }
 
 export async function executeRun(opts: RunOptions): Promise<RunResult> {
@@ -190,7 +190,7 @@ export function summarize(
   results: RunOutput["results"],
 ): string {
   const lines: string[] = [];
-  lines.push(`PCT 1.0 · profile ${opts.profile ?? "http-quick"} · proxy ${normalizeProxy(opts.proxy)}`);
+  lines.push(`PCT ${PCT_VERSION} · profile ${opts.profile ?? "http-quick"} · proxy ${normalizeProxy(opts.proxy)}`);
   lines.push(
     `Declared engine: ${opts.engine ? `${opts.engine}${opts.engineVersion ? ` ${opts.engineVersion}` : ""} (declared, not verified)` : "none"}`,
   );
