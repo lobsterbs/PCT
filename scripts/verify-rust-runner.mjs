@@ -11,7 +11,12 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { createTestOrigin } from "../packages/server/dist/src/index.js";
 import { BREAKS, startReferenceProxy } from "../packages/reference-proxy/dist/src/index.js";
-import { httpQuickTests, newNonce, runSuite } from "../packages/runner/dist/src/index.js";
+import { httpQuickTests, httpStandardTests, newNonce, runSuite } from "../packages/runner/dist/src/index.js";
+
+const PROFILES = [
+  { name: "http-quick", tests: httpQuickTests },
+  { name: "http-standard", tests: httpStandardTests },
+];
 import { newSecret } from "../packages/core/dist/src/index.js";
 
 const execFileAsync = promisify(execFile);
@@ -72,16 +77,16 @@ function startRustOrigin(nonce, secret) {
 }
 
 // Async on purpose: the reference proxy runs in this process and must keep serving while pct-run runs.
-async function runRust({ proxyBase, origin1, origin2, nonce, secret }) {
+async function runRust({ proxyBase, origin1, origin2, nonce, secret, profile }) {
   const { stdout } = await execFileAsync(
     runBin,
-    ["--proxy", proxyBase, "--origin1", origin1, "--origin2", origin2, "--nonce", nonce, "--timeout-ms", "10000"],
+    ["--proxy", proxyBase, "--origin1", origin1, "--origin2", origin2, "--nonce", nonce, "--timeout-ms", "10000", "--profile", profile],
     { env: { ...process.env, PCT_SECRET: secret }, timeout: 180000, maxBuffer: 16 * 1024 * 1024 },
   );
   return JSON.parse(stdout);
 }
 
-async function scenario(breaks) {
+async function scenario(breaks, profile) {
   const nonceT = newNonce();
   const secretT = newSecret();
   const nonceR = newNonce();
@@ -102,11 +107,11 @@ async function scenario(breaks) {
       nonce: nonceT,
       secret: secretT,
       timeoutMs: 10000,
-      profile: "http-quick",
+      profile: profile.name,
       suiteVersion: "1.0",
-      tests: httpQuickTests,
+      tests: profile.tests,
     });
-    const rsOut = await runRust({ proxyBase, origin1: rsO1, origin2: rsO2, nonce: nonceR, secret: secretR });
+    const rsOut = await runRust({ proxyBase, origin1: rsO1, origin2: rsO2, nonce: nonceR, secret: secretR, profile: profile.name });
     // Same Rust runner, now through the Rust proxy. Its statuses must match the TypeScript run through the TypeScript proxy.
     const rustProxy = await startRustProxy([rsO1, rsO2], breaks);
     let rsViaRustProxy;
@@ -117,6 +122,7 @@ async function scenario(breaks) {
         origin2: rsO2,
         nonce: nonceR,
         secret: secretR,
+        profile: profile.name,
       });
     } finally {
       await rustProxy.close();
@@ -171,18 +177,20 @@ function checkExpected(label, rsOut, tsOut, expect) {
 }
 
 const failures = [];
-const correct = await scenario([]);
-failures.push(...compare("correct proxy", correct));
-const total = httpQuickTests.length;
-const passing = correct.rsOut.results.filter((r) => r.status === "pass").length;
-console.log(`rust runner, correct proxy: ${passing}/${total} pass, compatibility ${correct.rsOut.report.valid ? correct.rsOut.report.compatibility : "invalid"}`);
-if (passing !== total) failures.push(`correct proxy: rust passed ${passing}/${total}`);
-if (correct.tsOut.results.filter((r) => r.status === "pass").length !== total) failures.push("correct proxy: ts did not pass all");
-
-for (const brk of BREAKS) {
-  const out = await scenario([brk]);
-  failures.push(...compare(`breakage ${brk}`, out));
-  if (EXPECTED[brk]) failures.push(...checkExpected(brk, out.rsOut, out.tsOut, EXPECTED[brk]));
+for (const profile of PROFILES) {
+  const total = profile.tests.length;
+  const correct = await scenario([], profile);
+  failures.push(...compare(`${profile.name} correct proxy`, correct));
+  const passing = correct.rsOut.results.filter((r) => r.status === "pass").length;
+  console.log(`${profile.name}: rust runner, correct proxy: ${passing}/${total} pass, compatibility ${correct.rsOut.report.valid ? correct.rsOut.report.compatibility : "invalid"}`);
+  if (correct.tsOut.results.filter((r) => r.status === "pass").length !== total && profile.name === "http-quick") {
+    failures.push("http-quick correct proxy: ts did not pass all");
+  }
+  for (const brk of BREAKS) {
+    const out = await scenario([brk], profile);
+    failures.push(...compare(`${profile.name} breakage ${brk}`, out));
+    if (profile.name === "http-quick" && EXPECTED[brk]) failures.push(...checkExpected(brk, out.rsOut, out.tsOut, EXPECTED[brk]));
+  }
 }
 
 if (failures.length > 0) {
@@ -190,4 +198,4 @@ if (failures.length > 0) {
   for (const f of failures) console.error("  " + f);
   process.exit(1);
 }
-console.log(`OK: the Rust runner matches the TypeScript runner on the correct proxy and all ${BREAKS.length} breakages, through both the TypeScript and the Rust proxy`);
+console.log(`OK: the Rust runner matches the TypeScript runner for ${PROFILES.map((p) => p.name).join(" and ")}, on the correct proxy and all ${BREAKS.length} breakages, through both the TypeScript and the Rust proxy`);

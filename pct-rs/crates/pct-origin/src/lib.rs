@@ -367,6 +367,53 @@ fn handle(mut req: Request, st: &State) -> Result<(), String> {
                 bytes,
             )
         }
+        "/etag" => {
+            let tag = qget(&pairs, "tag").unwrap_or_default();
+            if !is_value(&tag) {
+                return send_json(req, 400, &json!({"error": "tag"}));
+            }
+            let etag = format!("\"{tag}\"");
+            if headers.get("if-none-match").map(String::as_str) == Some(etag.as_str()) {
+                return send(req, 304, vec![("etag".into(), etag)], Box::new(Cursor::new(Vec::new())), Some(0));
+            }
+            send_bytes(
+                req,
+                200,
+                vec![
+                    ("content-type".into(), "text/plain".into()),
+                    ("etag".into(), etag),
+                    ("cache-control".into(), "no-cache".into()),
+                ],
+                format!("etag {tag}").into_bytes(),
+            )
+        }
+        "/set-cookies-two" => send_bytes(
+            req,
+            200,
+            vec![
+                ("content-type".into(), "text/plain".into()),
+                ("set-cookie".into(), "pcta=1; Path=/".into()),
+                ("set-cookie".into(), "pctb=2; Path=/".into()),
+            ],
+            b"ok".to_vec(),
+        ),
+        "/many-headers" => {
+            let mut hs = vec![("content-type".to_string(), "text/plain".to_string())];
+            for i in 0..50 {
+                hs.push((format!("x-pct-{i}"), i.to_string()));
+            }
+            send_bytes(req, 200, hs, b"many".to_vec())
+        }
+        "/cache-control" => send_bytes(
+            req,
+            200,
+            vec![
+                ("content-type".into(), "text/plain".into()),
+                ("cache-control".into(), "no-store, max-age=0".into()),
+            ],
+            b"cc".to_vec(),
+        ),
+        "/no-content" => send(req, 204, Vec::new(), Box::new(Cursor::new(Vec::new())), Some(0)),
         "/csp" => send_bytes(
             req,
             200,

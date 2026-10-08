@@ -1,13 +1,13 @@
 //! pct-run: runs the http-quick profile against a proxy and prints one JSON document on stdout.
 //!
 //! Usage: PCT_SECRET=<hex> pct-run --proxy <base> --origin1 <url> --origin2 <url> --nonce <id>
-//!          [--timeout-ms 10000] [--profile http-quick] [--suite-version 1.0]
+//!          [--timeout-ms 10000] [--profile http-quick|http-standard] [--suite-version 1.0]
 //! The secret comes from the environment, not argv, so it does not show up in process listings.
 
 use std::env;
 use std::process::exit;
 
-use pct_runner::{http_quick_tests, run_suite, RunOptions};
+use pct_runner::{http_quick_tests, http_standard_tests, run_suite, HttpTest, RunOptions};
 use serde_json::{json, Value};
 
 fn main() {
@@ -34,7 +34,14 @@ fn main() {
     let profile = flag("--profile").unwrap_or_else(|| "http-quick".to_string());
     let suite_version = flag("--suite-version").unwrap_or_else(|| "1.0".to_string());
 
-    let tests = http_quick_tests();
+    let tests: Vec<HttpTest> = match profile.as_str() {
+        "http-quick" => http_quick_tests(),
+        "http-standard" => http_standard_tests(),
+        other => {
+            eprintln!("unknown profile \"{other}\" (known: http-quick, http-standard)");
+            exit(2)
+        }
+    };
     let opts = RunOptions {
         proxy_base: &proxy,
         origin1: &origin1,

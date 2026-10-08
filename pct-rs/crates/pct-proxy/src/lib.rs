@@ -172,6 +172,9 @@ pub fn handle(mut req: Request, sh: &Shared) -> Result<(), String> {
     }
 
     let encoding = resp.header("content-encoding").unwrap_or("").to_ascii_lowercase();
+    // A HEAD reply must carry the length a GET would send. Upstream Content-Length is kept only for HEAD and only
+    // when the body was not re-encoded, because a decoded gzip body has a different length.
+    let upstream_len: Option<usize> = resp.header("content-length").and_then(|v| v.trim().parse().ok());
     let mut bytes = Vec::new();
     resp.into_reader().read_to_end(&mut bytes).map_err(|e| e.to_string())?;
     if encoding == "gzip" {
@@ -184,7 +187,12 @@ pub fn handle(mut req: Request, sh: &Shared) -> Result<(), String> {
         bytes[i] ^= 0xff;
     }
 
-    let mut response = Response::from_data(bytes).with_status_code(StatusCode(status));
+    let is_head = req.method().as_str().eq_ignore_ascii_case("HEAD");
+    let mut response = if is_head && encoding != "gzip" && upstream_len.is_some() {
+        Response::new(StatusCode(status), Vec::new(), std::io::Cursor::new(Vec::new()), upstream_len, None)
+    } else {
+        Response::from_data(bytes).with_status_code(StatusCode(status))
+    };
     for (k, v) in headers {
         if let Ok(h) = Header::from_bytes(k.as_bytes(), v.as_bytes()) {
             response = response.with_header(h);

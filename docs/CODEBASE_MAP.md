@@ -33,7 +33,7 @@ What exists in the repo today, and what is empty. Empty directories are listed s
 
 ## Empty directories (no content yet)
 
-- `profiles/`: Standard and Full profile lists. Only http-quick exists, in code.
+- `profiles/`: profile lists. Still empty. The profiles exist in code: http-quick (19 tests) and http-standard (37 tests, batch 1).
 - `tests/`: browser-level tests (service workers, storage, WebSocket in page, navigation). Not started.
 - `fixtures/`: static fixtures. Not started.
 - `packages/fetcher-analysis/src`: transport inference. Not started.

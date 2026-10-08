@@ -24,7 +24,7 @@ side. The Rust detection profiles and CLI are not built. See "Not built yet".
 | Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
 | Rust test origin (`pct-origin`) | pct-rs/crates/pct-origin | built; TypeScript runner passes 19/19 against it |
 | Rust reference proxy (`pct-proxy`) | pct-rs/crates/pct-proxy | built; all 9 breakages verified against the TypeScript runner |
-| Rust HTTP runner (`pct-run`, http-quick) | pct-rs/crates/pct-runner | built; same statuses as the TypeScript runner on the correct proxy and all 9 breakages (scripts/verify-rust-runner.mjs). Plain http only, no TLS |
+| Rust HTTP runner (`pct-run`, http-quick and http-standard batch 1) | pct-rs/crates/pct-runner | built; same statuses as the TypeScript runner for both profiles, on the correct proxy and all 9 breakages, through both proxies (scripts/verify-rust-runner.mjs). Plain http only, no TLS |
 | Rust core (parity with TypeScript) | pct-rs/crates/pct-core | built, parity-tested |
 
 130 tests pass with `npm test`.
@@ -83,7 +83,7 @@ the content checks cover that.
 - Rust runner coverage is the http-quick profile only. Browser-level tests exist in neither language.
 - Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
 - Automated tests for the result viewer. It has been checked in headless Chromium by screenshot, not by a test suite.
-- The Standard and Full profiles. Only `http-quick` exists.
+- The Standard and Full profiles. `http-quick` (19 tests) and the first batch of `http-standard` (37 tests in total) exist. The spec's Standard target is about 100 and Full is 150 to 250.
 - Benchmarking arbitrary user-supplied proxy URLs from the hosted service (needs SSRF guards).
 
 ## Deployment

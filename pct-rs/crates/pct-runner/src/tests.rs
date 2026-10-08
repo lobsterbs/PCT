@@ -407,6 +407,290 @@ pub fn http_quick_tests() -> Vec<HttpTest> {
     ]
 }
 
+// ---- Batch 1 of the Standard HTTP profile. Mirrors packages/runner/src/tests/http-standard.ts. ----
+
+fn networking_etag_revalidate_001(ctx: &mut Ctx) -> Verdict {
+    let tag = ctx.param("networking.etag-revalidate.001");
+    let url = ctx.t1(&format!("/etag?tag={tag}"));
+    let a = ctx.attempt(&url, Opts::get());
+    let first = tri!(reply_or(a, json!("200 with ETag"), "request did not complete"));
+    if first.status != 200 || first.get("etag").as_deref() != Some(&format!("\"{tag}\"")) {
+        return fail(
+            json!(format!("200 with etag \"{tag}\"")),
+            json!(format!("{} {}", first.status, first.get("etag").unwrap_or_default())),
+            "ETag not delivered",
+        );
+    }
+    let url2 = ctx.t1(&format!("/etag?tag={tag}"));
+    let a2 = ctx.attempt(&url2, Opts::get().header("if-none-match", &format!("\"{tag}\"")));
+    let second = tri!(reply_or(a2, json!("304"), "revalidation request did not complete"));
+    if second.status == 304 {
+        pass(json!("304 on revalidation"), json!(304))
+    } else {
+        fail(json!("304 on revalidation"), json!(second.status), "conditional request not honored")
+    }
+}
+
+fn networking_method_put_001(ctx: &mut Ctx) -> Verdict {
+    let payload = format!("pct-put-{}", ctx.nonce);
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().method("PUT").header("content-type", "text/plain").body(payload.clone().into_bytes()));
+    let r = tri!(reply_or(a, json!("PUT delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    if echo.method != "PUT" {
+        return fail(json!("PUT"), json!(echo.method), "method changed");
+    }
+    if echo.body_sha256 == sha(payload.as_bytes()) {
+        pass(json!("PUT with identical body"), json!("PUT, body intact"))
+    } else {
+        fail(json!(sha(payload.as_bytes())), json!(echo.body_sha256), "PUT body altered")
+    }
+}
+
+fn networking_method_delete_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().method("DELETE"));
+    let r = tri!(reply_or(a, json!("DELETE delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    if echo.method == "DELETE" {
+        pass(json!("DELETE"), json!("DELETE"))
+    } else {
+        fail(json!("DELETE"), json!(echo.method), "method changed")
+    }
+}
+
+fn networking_method_patch_001(ctx: &mut Ctx) -> Verdict {
+    let payload = format!("pct-patch-{}", ctx.nonce);
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().method("PATCH").header("content-type", "text/plain").body(payload.clone().into_bytes()));
+    let r = tri!(reply_or(a, json!("PATCH delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    if echo.method != "PATCH" {
+        return fail(json!("PATCH"), json!(echo.method), "method changed");
+    }
+    if echo.body_sha256 == sha(payload.as_bytes()) {
+        pass(json!("PATCH with identical body"), json!("PATCH, body intact"))
+    } else {
+        fail(json!(sha(payload.as_bytes())), json!(echo.body_sha256), "PATCH body altered")
+    }
+}
+
+fn networking_head_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/large?bytes=1024");
+    let a = ctx.attempt(&url, Opts::get().method("HEAD"));
+    let r = tri!(reply_or(a, json!("HEAD answered"), "request did not complete"));
+    if r.status != 200 {
+        return fail(json!(200), json!(r.status), "HEAD status changed");
+    }
+    if !r.body.is_empty() {
+        return fail(json!(0), json!(r.body.len()), "HEAD returned a body");
+    }
+    match r.get("content-length").as_deref() {
+        Some("1024") => pass(json!("200, content-length 1024, no body"), json!("200, no body")),
+        None => pass(json!("200, no body"), json!("200, no body, no content-length (allowed)")),
+        Some(other) => fail(json!("content-length 1024"), json!(other), "HEAD content-length changed"),
+    }
+}
+
+fn networking_no_content_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/no-content");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!(204), "request did not complete"));
+    if r.status != 204 {
+        return fail(json!(204), json!(r.status), "status changed");
+    }
+    if r.body.is_empty() {
+        pass(json!(204), json!(204))
+    } else {
+        fail(json!(0), json!(r.body.len()), "204 response carried a body")
+    }
+}
+
+fn networking_empty_post_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().method("POST").body(Vec::new()));
+    let r = tri!(reply_or(a, json!("POST delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    if echo.method != "POST" {
+        return fail(json!("POST"), json!(echo.method), "method changed");
+    }
+    match echo.body_length {
+        Some(0) => pass(json!(0), json!(0)),
+        other => fail(json!(0), json!(other), "empty body gained bytes"),
+    }
+}
+
+fn networking_large_request_body_001(ctx: &mut Ctx) -> Verdict {
+    let payload = deterministic_bytes(1048576, &format!("{}:big", ctx.nonce));
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(
+        &url,
+        Opts::get().method("POST").header("content-type", "application/octet-stream").body(payload.clone()),
+    );
+    let r = tri!(reply_or(a, json!("body delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    if echo.body_length == Some(payload.len() as u64) && echo.body_sha256 == sha(&payload) {
+        pass(json!(sha(&payload)), json!(echo.body_sha256))
+    } else {
+        fail(json!(sha(&payload)), json!(echo.body_sha256), "1 MiB request body differs from what was sent")
+    }
+}
+
+fn networking_long_header_001(ctx: &mut Ctx) -> Verdict {
+    let value: String = ctx.nonce.repeat(400).chars().take(8000).collect();
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().header("x-pct-long", &value));
+    let r = tri!(reply_or(a, json!("header delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    match echo.headers.get("x-pct-long") {
+        Some(got) if *got == value => pass(json!("8000-byte header"), json!("8000-byte header")),
+        got => fail(json!(value.len()), json!(got.map(|g| g.len())), "long request header was truncated or dropped"),
+    }
+}
+
+fn networking_user_agent_001(ctx: &mut Ctx) -> Verdict {
+    let ua = "pct-runner/1.0";
+    let url = ctx.t1("/echo");
+    let a = ctx.attempt(&url, Opts::get().header("user-agent", ua));
+    let r = tri!(reply_or(a, json!("header delivered"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin did not receive a readable echo"));
+    match echo.headers.get("user-agent") {
+        Some(got) if got == ua => pass(json!(ua), json!(got)),
+        got => fail(json!(ua), json!(got), "User-Agent was dropped or replaced"),
+    }
+}
+
+fn networking_content_length_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/large?bytes=4096");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("body delivered"), "request did not complete"));
+    if r.body.len() != 4096 {
+        return fail(json!(4096), json!(r.body.len()), "body length changed");
+    }
+    match r.get("content-length").as_deref() {
+        Some("4096") => pass(json!("content-length 4096"), json!("content-length 4096")),
+        None => pass(json!("body 4096 bytes"), json!("no content-length, body intact")),
+        Some(other) => fail(json!("content-length 4096"), json!(other), "Content-Length does not match the body"),
+    }
+}
+
+fn cookies_multiple_set_cookie_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/set-cookies-two");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("Set-Cookie delivered"), "request did not complete"));
+    let cookies = r.set_cookies().join("; ");
+    let has_a = cookies.contains("pcta=1");
+    let has_b = cookies.contains("pctb=2");
+    if has_a && has_b {
+        pass(json!("pcta=1 and pctb=2"), json!(cookies))
+    } else if has_a || has_b {
+        partial(json!("pcta=1 and pctb=2"), json!(cookies), "only one of two Set-Cookie headers preserved")
+    } else {
+        fail(json!("pcta=1 and pctb=2"), if cookies.is_empty() { Value::Null } else { json!(cookies) }, "Set-Cookie headers dropped")
+    }
+}
+
+fn networking_cache_control_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/cache-control");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("header delivered"), "request did not complete"));
+    let cc = r.get("cache-control").unwrap_or_default();
+    if cc.contains("no-store") {
+        pass(json!("no-store"), json!(cc))
+    } else {
+        fail(json!("no-store"), if cc.is_empty() { Value::Null } else { json!(cc) }, "Cache-Control was dropped or altered")
+    }
+}
+
+fn networking_many_headers_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/many-headers");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("50 headers"), "request did not complete"));
+    let present = (0..50).filter(|i| r.get(&format!("x-pct-{i}")).as_deref() == Some(i.to_string().as_str())).count();
+    if present == 50 {
+        pass(json!(50), json!(present))
+    } else if present > 0 {
+        partial(json!(50), json!(present), &format!("{} response header(s) dropped", 50 - present))
+    } else {
+        fail(json!(50), json!(present), "response headers dropped")
+    }
+}
+
+fn networking_redirect_303_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/redirect?hops=1&code=303");
+    let a = ctx.attempt(&url, Opts::get().method("POST").header("content-type", "text/plain").body(b"pct-303".to_vec()));
+    let r = tri!(reply_or(a, json!("GET after 303"), "redirect did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "final hop did not return an echo"));
+    if echo.method == "GET" {
+        pass(json!("GET after 303"), json!("GET"))
+    } else {
+        fail(json!("GET after 303"), json!(echo.method), "303 did not convert POST to GET")
+    }
+}
+
+fn networking_redirect_301_post_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/redirect?hops=1&code=301");
+    let a = ctx.attempt(&url, Opts::get().method("POST").header("content-type", "text/plain").body(b"pct-301".to_vec()));
+    let r = tri!(reply_or(a, json!("GET after 301"), "redirect did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "final hop did not return an echo"));
+    if echo.method == "GET" {
+        pass(json!("GET after 301"), json!("GET"))
+    } else {
+        fail(json!("GET after 301"), json!(echo.method), "301 did not convert POST to GET")
+    }
+}
+
+fn networking_status_500_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/status?code=500");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!(500), "request did not complete"));
+    if r.status == 500 {
+        pass(json!(500), json!(500))
+    } else {
+        fail(json!(500), json!(r.status), "status code rewritten")
+    }
+}
+
+fn networking_repeated_query_001(ctx: &mut Ctx) -> Verdict {
+    let url = ctx.t1("/echo?k=1&k=2");
+    let a = ctx.attempt(&url, Opts::get());
+    let r = tri!(reply_or(a, json!("/echo?k=1&k=2"), "request did not complete"));
+    let echo = tri!(echo_or(parse_echo(&r.body), "origin response body was not the echo document"));
+    if echo.path == "/echo?k=1&k=2" {
+        pass(json!("/echo?k=1&k=2"), json!(echo.path))
+    } else {
+        fail(json!("/echo?k=1&k=2"), json!(echo.path), "repeated query parameters changed")
+    }
+}
+
+/// The http-standard profile so far: the 19 http-quick tests, then batch 1 (18 tests). Same order as the TypeScript side.
+pub fn http_standard_tests() -> Vec<HttpTest> {
+    use CategoryId as C;
+    use Tier::{Edge, Standard};
+    let mut v = http_quick_tests();
+    v.extend(vec![
+        HttpTest { def: def("networking.etag-revalidate.001", C::Networking, Standard, "Conditional GET with a matching ETag gets 304", false), run: networking_etag_revalidate_001 },
+        HttpTest { def: def("networking.method-put.001", C::Networking, Standard, "PUT reaches the origin with method and body intact", false), run: networking_method_put_001 },
+        HttpTest { def: def("networking.method-delete.001", C::Networking, Standard, "DELETE reaches the origin unchanged", false), run: networking_method_delete_001 },
+        HttpTest { def: def("networking.method-patch.001", C::Networking, Standard, "PATCH reaches the origin with body intact", false), run: networking_method_patch_001 },
+        HttpTest { def: def("networking.head.001", C::Networking, Standard, "HEAD returns the headers and no body", false), run: networking_head_001 },
+        HttpTest { def: def("networking.no-content.001", C::Networking, Standard, "204 No Content passes through with no body", false), run: networking_no_content_001 },
+        HttpTest { def: def("networking.empty-post.001", C::Networking, Standard, "POST with an empty body reaches the origin as empty", false), run: networking_empty_post_001 },
+        HttpTest { def: def("networking.large-request-body.001", C::Networking, Standard, "1 MiB POST body arrives byte-for-byte", false), run: networking_large_request_body_001 },
+        HttpTest { def: def("networking.long-header.001", C::Networking, Standard, "An 8000-byte request header reaches the origin intact", false), run: networking_long_header_001 },
+        HttpTest { def: def("networking.user-agent.001", C::Networking, Standard, "A custom User-Agent reaches the origin unchanged", false), run: networking_user_agent_001 },
+        HttpTest { def: def("networking.content-length.001", C::Networking, Standard, "Content-Length matches the body that was sent", false), run: networking_content_length_001 },
+        HttpTest { def: def("cookies.multiple-set-cookie.001", C::Cookies, Standard, "Two Set-Cookie headers in one response both reach the client", false), run: cookies_multiple_set_cookie_001 },
+        HttpTest { def: def("networking.cache-control.001", C::Networking, Standard, "Cache-Control: no-store reaches the client", false), run: networking_cache_control_001 },
+        HttpTest { def: def("networking.many-headers.001", C::Networking, Edge, "Fifty response headers all survive", false), run: networking_many_headers_001 },
+        HttpTest { def: def("networking.redirect-303.001", C::Networking, Standard, "303 redirect turns POST into GET", false), run: networking_redirect_303_001 },
+        HttpTest { def: def("networking.redirect-301-post.001", C::Networking, Standard, "301 redirect turns POST into GET", false), run: networking_redirect_301_post_001 },
+        HttpTest { def: def("networking.status-500.001", C::Networking, Standard, "Server error status 500 passes through", false), run: networking_status_500_001 },
+        HttpTest { def: def("networking.repeated-query.001", C::Networking, Standard, "Repeated query parameters keep both values in order", false), run: networking_repeated_query_001 },
+    ]);
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::count_sse_events;

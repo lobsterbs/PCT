@@ -246,6 +246,39 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
         return sendJson(res, 200, { ok: true }, { "access-control-allow-origin": origin, vary: "Origin" });
       }
 
+      case "/etag": {
+        // Validator and revalidation: a matching If-None-Match gets 304 with no body.
+        const tag = url.searchParams.get("tag") ?? "";
+        if (!VALUE.test(tag)) return sendJson(res, 400, { error: "tag" });
+        const etag = `"${tag}"`;
+        if (req.headers["if-none-match"] === etag) {
+          res.writeHead(304, { etag });
+          return res.end();
+        }
+        res.writeHead(200, { "content-type": "text/plain", etag, "cache-control": "no-cache" });
+        return res.end(`etag ${tag}`);
+      }
+
+      case "/set-cookies-two":
+        // Two Set-Cookie headers in one response.
+        res.writeHead(200, { "content-type": "text/plain", "set-cookie": ["pcta=1; Path=/", "pctb=2; Path=/"] });
+        return res.end("ok");
+
+      case "/many-headers": {
+        const headers: Record<string, string> = { "content-type": "text/plain" };
+        for (let i = 0; i < 50; i++) headers[`x-pct-${i}`] = String(i);
+        res.writeHead(200, headers);
+        return res.end("many");
+      }
+
+      case "/cache-control":
+        res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store, max-age=0" });
+        return res.end("cc");
+
+      case "/no-content":
+        res.writeHead(204);
+        return res.end();
+
       case "/csp":
         res.writeHead(200, { "content-type": "text/html", "content-security-policy": cspFor(nonce) });
         return res.end("<!doctype html><title>csp</title>");

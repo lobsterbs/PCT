@@ -11,7 +11,7 @@ use pct_core::session::derive;
 use pct_core::{CategoryId, TestDefinition, Tier};
 
 pub use suite::{run_suite, RunOptions, RunOutput};
-pub use tests::http_quick_tests;
+pub use tests::{http_quick_tests, http_standard_tests};
 pub use verdict::Verdict;
 
 /// Per-run state, the Rust counterpart of RunContext in packages/runner/src/types.ts.

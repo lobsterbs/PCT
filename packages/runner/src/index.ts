@@ -4,3 +4,4 @@ export * from "./http.js";
 export * from "./verdict.js";
 export * from "./suite.js";
 export * from "./tests/http-quick.js";
+export * from "./tests/http-standard.js";

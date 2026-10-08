@@ -5,7 +5,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { startReferenceProxy } from "../packages/reference-proxy/dist/src/index.js";
-import { httpQuickTests, newNonce, runSuite } from "../packages/runner/dist/src/index.js";
+import { httpQuickTests, httpStandardTests, newNonce, runSuite } from "../packages/runner/dist/src/index.js";
 import { newSecret } from "../packages/core/dist/src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -26,7 +26,7 @@ function startRustOrigin() {
   });
 }
 
-async function run(breaks) {
+async function run(breaks, tests = httpQuickTests, profile = "http-quick") {
   const origin = await startRustOrigin();
   const proxy = await startReferenceProxy({
     allowOrigins: [`http://127.0.0.1:${origin.port}`, `http://localhost:${origin.port}`],
@@ -40,9 +40,9 @@ async function run(breaks) {
       nonce,
       secret,
       timeoutMs: 10000,
-      profile: "http-quick",
+      profile,
       suiteVersion: "1.0",
-      tests: httpQuickTests,
+      tests,
     });
   } finally {
     await proxy.close();
@@ -59,6 +59,16 @@ if (!correct.report.valid || counts.pass !== httpQuickTests.length) {
   console.error("FAIL: the Rust origin does not satisfy the TypeScript runner");
   process.exit(1);
 }
+// The http-standard batch too: the TypeScript runner must pass every test against the Rust origin.
+const standard = await run([], httpStandardTests, "http-standard");
+const standardFailures = standard.results.filter((r) => r.status !== "pass").map((r) => `${r.status} ${r.id} ${r.diagnostics?.explanation ?? ""}`);
+console.log(`rust origin, http-standard, ts runner: ${standard.results.filter((r) => r.status === "pass").length}/${httpStandardTests.length} pass`);
+for (const f of standardFailures) console.log("  ", f);
+if (standardFailures.length > 0) {
+  console.error("FAIL: the Rust origin does not satisfy the TypeScript runner for http-standard");
+  process.exit(1);
+}
+
 const broken = await run(["strip-csp", "corrupt-large"]);
 const caught = broken.results.filter((r) => r.status !== "pass").map((r) => r.id).sort();
 console.log("rust origin, strip-csp + corrupt-large caught:", caught.join(", "));
