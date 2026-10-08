@@ -43,10 +43,11 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
   // Score panel: badge, the hero card (from render.ts), and the category list.
   const scorePanel = el(doc, "div", { class: "pct-panel", role: "tabpanel" });
   const grade = result.report.valid ? result.report.grade : undefined;
-  scorePanel.append(
-    el(doc, "md-shape", { name: shapeFor(grade), style: "width:48px;height:48px" }),
-    renderReport(result.report, doc),
-  );
+  const report = renderReport(result.report, doc);
+  // The grade badge sits inside the hero card, not floating above it.
+  const hero = report.querySelector(".pct-hero");
+  if (hero) hero.prepend(el(doc, "md-shape", { name: shapeFor(grade), class: "pct-badge" }));
+  scorePanel.append(report);
 
   // Tests panel: segmented filter over the individual results, each entry animated in.
   const testsPanel = el(doc, "div", { class: "pct-panel", role: "tabpanel", hidden: "" });
@@ -69,7 +70,8 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
     });
   };
   const filter = el(doc, "md-segmented-button", {
-    items: "All,Failed,Partial,Passed",
+    // md-segmented-button reads `items` as a JSON array; a comma-separated string falls back to "Segment 1/2".
+    items: JSON.stringify(["All", "Failed", "Partial", "Passed"]),
     "selected-index": "0",
     "aria-label": "Filter tests by result",
   });
@@ -106,7 +108,8 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
 
   root.append(tabs, ...panels);
   if (result.sample) {
-    root.append(el(doc, "md-snackbar", { open: "", message: "Sample data. Not a benchmark result.", "action-label": "OK" }));
+    // Inline, not a snackbar: a floating notice would cover the content it is warning about.
+    root.prepend(el(doc, "div", { class: "pct-sample", role: "status" }, ["Sample data. Not a benchmark result."]));
   }
   return root;
 }

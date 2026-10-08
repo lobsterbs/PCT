@@ -3,12 +3,14 @@ import "@materialwebunofficial/md3e-web";
 import type { ScoreReport } from "@pct/core";
 import { enter } from "./motion.js";
 import { sampleDocument } from "./sample.js";
+import { applyStyles } from "./styles.js";
 import { applyTheme } from "./theme.js";
 import { resolveResultUrl } from "./url.js";
 import { renderView, type ResultDocument } from "./view.js";
 
 export function mount(doc: Document, result: ResultDocument): void {
   applyTheme(doc);
+  applyStyles(doc);
 
   const bar = doc.createElement("md-top-app-bar");
   bar.setAttribute("variant", "small");
