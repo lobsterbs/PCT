@@ -204,7 +204,11 @@ fn exceeded() -> String {
 fn read_reply(resp: ureq::Response, timeout_ms: u64) -> Result<Reply, String> {
     let status = resp.status();
     let mut headers = Vec::new();
-    for name in resp.headers_names() {
+    // headers_names() repeats a name once per occurrence. Visit each name once, or its values are doubled.
+    let mut names = resp.headers_names();
+    names.sort();
+    names.dedup();
+    for name in names {
         let lower = name.to_ascii_lowercase();
         for value in resp.all(&name) {
             headers.push((lower.clone(), value.to_string()));

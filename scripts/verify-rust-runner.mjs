@@ -17,9 +17,10 @@ import { newSecret } from "../packages/core/dist/src/index.js";
 const execFileAsync = promisify(execFile);
 const here = dirname(fileURLToPath(import.meta.url));
 const rustDir = join(here, "..", "pct-rs", "target", "debug");
+const proxyBin = join(rustDir, "pct-proxy");
 const runBin = join(rustDir, "pct-run");
 const originBin = join(rustDir, "pct-origin");
-for (const bin of [runBin, originBin]) {
+for (const bin of [runBin, originBin, proxyBin]) {
   if (!existsSync(bin)) {
     console.error(`missing ${bin}: run cargo build -p pct-runner -p pct-origin in pct-rs first`);
     process.exit(2);
@@ -38,6 +39,22 @@ const EXPECTED = {
   "corrupt-large": [["networking.response-integrity.001", "fail"]],
   "leak-cookies": [["cookies.isolation.001", "fail"]],
 };
+
+// The Rust reference proxy, with the same allowlist and breakages as the TypeScript one.
+function startRustProxy(allow, breaks) {
+  return new Promise((resolve, reject) => {
+    const args = [...allow.flatMap((a) => ["--allow-origin", a]), "--port", "0"];
+    if (breaks.length) args.push("--break", breaks.join(","));
+    const child = spawn(proxyBin, args, { stdio: ["ignore", "pipe", "inherit"] });
+    let out = "";
+    child.stdout.on("data", (d) => {
+      out += d.toString();
+      const m = /PORT (\d+)/.exec(out);
+      if (m) resolve({ port: Number(m[1]), close: async () => child.kill() });
+    });
+    child.once("exit", (code) => reject(new Error(`pct-proxy exited ${code}`)));
+  });
+}
 
 function startRustOrigin(nonce, secret) {
   return new Promise((resolve, reject) => {
@@ -90,7 +107,21 @@ async function scenario(breaks) {
       tests: httpQuickTests,
     });
     const rsOut = await runRust({ proxyBase, origin1: rsO1, origin2: rsO2, nonce: nonceR, secret: secretR });
-    return { tsOut, rsOut };
+    // Same Rust runner, now through the Rust proxy. Its statuses must match the TypeScript run through the TypeScript proxy.
+    const rustProxy = await startRustProxy([rsO1, rsO2], breaks);
+    let rsViaRustProxy;
+    try {
+      rsViaRustProxy = await runRust({
+        proxyBase: `http://127.0.0.1:${rustProxy.port}/`,
+        origin1: rsO1,
+        origin2: rsO2,
+        nonce: nonceR,
+        secret: secretR,
+      });
+    } finally {
+      await rustProxy.close();
+    }
+    return { tsOut, rsOut, rsViaRustProxy };
   } finally {
     await proxy.close();
     await ts.close();
@@ -98,7 +129,13 @@ async function scenario(breaks) {
   }
 }
 
-function compare(label, { tsOut, rsOut }) {
+function compare(label, { tsOut, rsOut, rsViaRustProxy }) {
+  const problems = compareRuns(label, tsOut, rsOut);
+  if (rsViaRustProxy) problems.push(...compareRuns(`${label} (rust runner, rust proxy)`, tsOut, rsViaRustProxy));
+  return problems;
+}
+
+function compareRuns(label, tsOut, rsOut) {
   const problems = [];
   if (tsOut.reachable !== rsOut.reachable) problems.push(`reachable: ts=${tsOut.reachable} rust=${rsOut.reachable}`);
   const tsById = new Map(tsOut.results.map((r) => [r.id, r]));
@@ -153,4 +190,4 @@ if (failures.length > 0) {
   for (const f of failures) console.error("  " + f);
   process.exit(1);
 }
-console.log(`OK: the Rust runner matches the TypeScript runner on the correct proxy and all ${BREAKS.length} breakages`);
+console.log(`OK: the Rust runner matches the TypeScript runner on the correct proxy and all ${BREAKS.length} breakages, through both the TypeScript and the Rust proxy`);
