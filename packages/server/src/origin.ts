@@ -288,6 +288,11 @@ export function createTestOrigin(opts: TestOriginOptions): Promise<TestOrigin> {
         });
         return res.end("sec");
 
+      case "/iframe-host":
+        // A page that embeds /html in an iframe, so tests can check nested loads through the proxy.
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        return res.end('<!doctype html><meta charset="utf-8"><title>host</title><iframe id="f" src="/html"></iframe>');
+
       case "/csp":
         res.writeHead(200, { "content-type": "text/html", "content-security-policy": cspFor(nonce) });
         return res.end("<!doctype html><title>csp</title>");

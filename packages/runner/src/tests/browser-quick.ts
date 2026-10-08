@@ -136,10 +136,92 @@ const javascriptFetchPage: BrowserTest = {
   },
 };
 
+const navigationIframe: BrowserTest = {
+  def: def("navigation.iframe.001", "navigation", "standard", "A page with an iframe loads the framed page through the proxy"),
+  async run(ctx, context): Promise<Verdict> {
+    const page = await context.newPage();
+    const err = await go(page, ctx.direct(ctx.origin1, "/iframe-host"), ctx);
+    if (err) return fail("page loads", err, "navigation to the host page failed");
+    const expected = `h\u00e9llo-${ctx.nonce}`;
+    const text = await page
+      .frameLocator("#f")
+      .locator("#pct-text")
+      .textContent({ timeout: ctx.timeoutMs })
+      .catch(() => null);
+    return text === expected ? pass(expected, text) : fail(expected, text, "framed page did not render through the proxy");
+  },
+};
+
+const storageSessionIsolation: BrowserTest = {
+  def: def("storage.session-isolation.001", "storage", "standard", "sessionStorage is per tab: a second tab on the same origin does not see it"),
+  async run(ctx, context): Promise<Verdict> {
+    const value = `pct-${ctx.nonce}`;
+    const first = await context.newPage();
+    const err = await go(first, ctx.direct(ctx.origin1, "/html"), ctx);
+    if (err) return fail("page loads", err, "navigation to origin 1 failed");
+    await first.evaluate((v) => sessionStorage.setItem("pct", v), value);
+    const back = await first.evaluate(() => sessionStorage.getItem("pct"));
+    if (back !== value) return fail(value, back, "sessionStorage was not writable");
+    const second = await context.newPage();
+    const err2 = await go(second, ctx.direct(ctx.origin1, "/html"), ctx);
+    if (err2) return fail("page loads", err2, "navigation for the second tab failed");
+    const other = await second.evaluate(() => sessionStorage.getItem("pct"));
+    return other === null
+      ? pass("null in a second tab", "null")
+      : fail("null in a second tab", other, "sessionStorage leaked into another tab");
+  },
+};
+
+const cookiesJsWrite: BrowserTest = {
+  def: def("cookies.js-write.001", "cookies", "standard", "A cookie written by page JavaScript reaches the origin"),
+  async run(ctx, context): Promise<Verdict> {
+    const value = ctx.nonce.replace(/[^A-Za-z0-9_-]/g, "");
+    const page = await context.newPage();
+    const err = await go(page, ctx.direct(ctx.origin1, "/html"), ctx);
+    if (err) return fail("page loads", err, "navigation to origin 1 failed");
+    await page.evaluate((v) => {
+      // The page runs in the browser, so DOM globals exist there; the runner's own TypeScript lib has no DOM.
+      (globalThis as unknown as { document: { cookie: string } }).document.cookie = `pctjs=${v}; path=/`;
+    }, value);
+    const err2 = await go(page, ctx.direct(ctx.origin1, "/read-cookie"), ctx);
+    if (err2) return fail("cookie read", err2, "navigation to the cookie reader failed");
+    const body = (await page.textContent("body", { timeout: ctx.timeoutMs }).catch(() => "")) ?? "";
+    return body.includes(`pctjs=${value}`)
+      ? pass(`pctjs=${value}`, "sent to origin")
+      : fail(`pctjs=${value}`, body.slice(0, 160), "cookie written by JavaScript did not reach the origin");
+  },
+};
+
+const javascriptCorsSimple: BrowserTest = {
+  def: def("javascript.cors-simple.001", "javascript", "standard", "A cross-origin GET from a page succeeds when the origin allows it"),
+  async run(ctx, context): Promise<Verdict> {
+    const page = await context.newPage();
+    const err = await go(page, ctx.direct(ctx.origin1, "/html"), ctx);
+    if (err) return fail("page loads", err, "navigation to origin 1 failed");
+    const url = ctx.direct(ctx.origin2, "/cors");
+    const result = await page.evaluate(async (u) => {
+      try {
+        const r = await fetch(u);
+        return { ok: r.ok, text: await r.text() };
+      } catch (e) {
+        return { error: String(e) };
+      }
+    }, url);
+    if ("error" in result) return fail("cross-origin fetch resolves", result.error, "the browser blocked the cross-origin response");
+    return result.text.includes('"ok":true')
+      ? pass("cross-origin fetch resolves", "ok")
+      : fail("cross-origin fetch resolves", result.text.slice(0, 120), "cross-origin response body was not the origin's");
+  },
+};
+
 export const browserQuickTests: readonly BrowserTest[] = [
   navigationCore,
   navigationRedirect,
   cookiesBrowserIsolation,
   storageLocalIsolation,
   javascriptFetchPage,
+  navigationIframe,
+  storageSessionIsolation,
+  cookiesJsWrite,
+  javascriptCorsSimple,
 ];

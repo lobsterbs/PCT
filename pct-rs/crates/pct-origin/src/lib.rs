@@ -425,6 +425,12 @@ fn handle(mut req: Request, st: &State) -> Result<(), String> {
             ],
             b"sec".to_vec(),
         ),
+        "/iframe-host" => send_bytes(
+            req,
+            200,
+            vec![("content-type".into(), "text/html; charset=utf-8".into())],
+            b"<!doctype html><meta charset=\"utf-8\"><title>host</title><iframe id=\"f\" src=\"/html\"></iframe>".to_vec(),
+        ),
         "/csp" => send_bytes(
             req,
             200,
