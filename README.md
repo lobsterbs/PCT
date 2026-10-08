@@ -4,7 +4,7 @@ PCT measures how faithfully a web proxy carries HTTP traffic, and reports what i
 proxy's engine. It is a behavioral benchmark: it checks what the proxy does, not what it claims to be.
 
 **Status: early.** The end-to-end benchmark (runner, test origin, reference proxy, CLI, hosted service) runs in
-TypeScript. The Rust port covers the core layer only. Browser-level tests are not built. See "Not built yet".
+TypeScript. Rust ports of the origin and reference proxy are verified; the Rust runner is in progress. See "Not built yet".
 
 ## What works today
 
@@ -13,17 +13,19 @@ TypeScript. The Rust port covers the core layer only. Browser-level tests are no
 | Scoring, grades, caps, comparability | packages/core | built, tested |
 | Run sessions, signed tokens, derived values | packages/core | built, tested |
 | Deterministic payloads and redaction | packages/core, packages/server | built, tested |
-| Test origin (deterministic endpoints) | packages/server | built, tested |
-| HTTP-level test suite (`http-quick`, 19 tests) | packages/runner | built, tested |
+| Test origin (deterministic endpoints, receipt ledger) | packages/server | built, tested |
+| HTTP-level test suite (`http-quick`, 19 tests) with receipt checks | packages/runner | built, tested |
 | Reference proxy with 9 breakages | packages/reference-proxy | built, tested |
 | Passive engine detection (11 profiles) | packages/detect | built, tested |
 | `pct run` CLI | packages/cli | built, tested |
-| Result viewer (Material 3 Expressive) | packages/web | built, DOM-tested |
-| Static site build | scripts/build-static.mjs | built, served locally |
+| Result viewer (dark theme, Material 3 Expressive) | packages/web | built, checked in headless Chromium; no automated viewer tests yet |
+| Static site build | scripts/build-static.mjs | built, checked in headless Chromium |
 | Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
+| Rust test origin (`pct-origin`) | pct-rs/crates/pct-origin | built; TypeScript runner passes 19/19 against it |
+| Rust reference proxy (`pct-proxy`) | pct-rs/crates/pct-proxy | built; all 9 breakages verified against the TypeScript runner |
 | Rust core (parity with TypeScript) | pct-rs/crates/pct-core | built, parity-tested |
 
-128 tests pass with `npm test`.
+130 tests pass with `npm test`.
 
 ## Quick start
 
@@ -62,18 +64,22 @@ The benchmark's expected values are not predictable from anything a proxy can se
 - Each run also has a secret, which stays in the runner and the test origin. It never appears in a URL,
   header, or body. A test checks this with a wiretap proxy that logs every byte.
 - Every expected payload is derived from the secret, so a captured run reveals nothing about the next run.
+- Each request carries a receipt id. The origin records the ids it serves, and the runner fails any test whose
+  requests never reached the origin. A proxy that fabricates a response without contacting the origin is caught.
 - Run tokens are HMAC-signed, expire, and can be spent once. This is the hosted-mode design. The hosted
   server is not built.
 
 Limit: in local mode the secret is on the same machine as the runner. Whoever runs the benchmark can read it.
 That is inherent to running code on a machine you do not control. Hosted mode is the way to close that gap.
+Receipts prove the origin was contacted with the right id. They do not prove the proxy relayed the response faithfully;
+the content checks cover that.
 
 ## Not built yet
 
-- The Rust port of the test origin, runner, reference proxy, detection, and CLI.
+- The Rust runner (the 19 HTTP tests, the suite, and receipt checks), the Rust detection profiles, and the Rust CLI.
 - Browser-level tests (service workers, storage isolation, WebSocket in a page, navigation).
+- Automated tests for the result viewer. It has been checked in headless Chromium by screenshot, not by a test suite.
 - The Standard and Full profiles. Only `http-quick` exists.
-- Origin receipts: the origin logs each request it serves, so a proxy that never contacts it can be caught.
 - Benchmarking arbitrary user-supplied proxy URLs from the hosted service (needs SSRF guards).
 
 ## Deployment
