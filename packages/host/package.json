@@ -1,0 +1,14 @@
+{
+  "name": "@pct/host",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "files": ["dist/src"],
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@pct/cli": "0.1.0",
+    "@pct/reference-proxy": "0.1.0",
+    "@pct/server": "0.1.0"
+  }
+}
