@@ -1,4 +1,7 @@
+# Dependencies and build output
 node_modules/
 dist/
 *.log
 .DS_Store
+# Generated golden vectors (regenerate with scripts/gen-rust-golden.mjs)
+pct-rs/crates/pct-core/tests/golden/
