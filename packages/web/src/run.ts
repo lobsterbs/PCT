@@ -11,21 +11,50 @@ export function documentFrom(json: unknown): ResultDocument {
   if (!json || typeof json !== "object" || !("report" in json) || !("results" in json)) {
     throw new Error("not a PCT result document");
   }
-  const d = json as { report: ScoreReport; results: unknown; detection?: { attributions?: unknown; coverage?: unknown } };
+  const d = json as {
+    report: ScoreReport;
+    results: unknown;
+    benchmark?: { selection?: unknown };
+    detection?: { attributions?: unknown; coverage?: unknown };
+  };
   const results = Array.isArray(d.results) ? (d.results as ResultDocument["results"]) : [];
   const attributions = Array.isArray(d.detection?.attributions)
     ? (d.detection?.attributions as ResultDocument["detection"]["attributions"])
     : [];
-  const coverage = Array.isArray(d.detection?.coverage)
-    ? (d.detection?.coverage as ProfileCoverageRow[])
-    : undefined;
-  return { report: d.report, results, detection: { attributions, ...(coverage ? { coverage } : {}) } };
+  const coverage = Array.isArray(d.detection?.coverage) ? (d.detection?.coverage as ProfileCoverageRow[]) : undefined;
+  const sel = d.benchmark?.selection as { full?: unknown; selected?: unknown; total?: unknown } | undefined;
+  const selection =
+    sel && typeof sel.full === "boolean" && typeof sel.selected === "number" && typeof sel.total === "number"
+      ? { full: sel.full, selected: sel.selected, total: sel.total }
+      : undefined;
+  return {
+    report: d.report,
+    results,
+    detection: { attributions, ...(coverage ? { coverage } : {}) },
+    ...(selection ? { selection } : {}),
+  };
 }
 
-/** The benchmark page. Starts a run on the host, shows progress, and renders the result here only. */
+/** The benchmark page. Runs the selection it was given, shows progress, and renders the result here only. */
 export function mountRun(doc: Document): void {
   setupPage(doc);
   doc.body.append(appBar(doc, "Benchmark", "Built-in reference proxy"));
+
+  const params = new URLSearchParams(window.location.search);
+  const tests = params.get("tests");
+  const detect = params.get("detect") !== "0";
+  const autostart = params.get("start") === "1";
+
+  // The same selection the start page sent. An empty query runs every test, as before.
+  const apiQuery = new URLSearchParams();
+  if (tests) apiQuery.set("tests", tests);
+  if (!detect) apiQuery.set("detect", "0");
+  const apiUrl = `./api/run${apiQuery.toString() ? `?${apiQuery.toString()}` : ""}`;
+
+  const testCount = tests ? tests.split(",").length : null;
+  const selectionText =
+    testCount === null ? "Every test in the quick HTTP suite" : `${testCount} selected test${testCount === 1 ? "" : "s"}`;
+  const detectionText = detect ? "Passive detection is on." : "Passive detection is off.";
 
   const main = el(doc, "main", { class: "pct-page" });
   const back = el(doc, "a", { class: "pct-link md-label-large", href: "./index.html" }, ["Back to start"]);
@@ -33,7 +62,7 @@ export function mountRun(doc: Document): void {
   const intro = el(doc, "section", { class: "pct-intro" }, [
     el(doc, "h1", { class: "md-headline-medium" }, ["Run the benchmark"]),
     el(doc, "p", { class: "md-body-large" }, [
-      "This runs the HTTP suite and passive detection against the built-in reference proxy. It does not test a proxy you enter.",
+      `${selectionText}, against the built-in reference proxy. ${detectionText} It does not test a proxy you enter.`,
     ]),
   ]);
 
@@ -53,6 +82,23 @@ export function mountRun(doc: Document): void {
     ]);
   };
 
+  const showResult = (body: unknown): void => {
+    const data = documentFrom(body);
+    setStatus([]);
+    if (data.selection && !data.selection.full) {
+      // A partial run is not comparable with a full one. Say so next to the score, not only in the data.
+      output.append(
+        el(doc, "md-card", { variant: "outlined", class: "pct-partial" }, [
+          el(doc, "p", { class: "md-title-medium" }, ["Partial run"]),
+          el(doc, "p", { class: "md-body-medium" }, [
+            `${data.selection.selected} of ${data.selection.total} tests ran. The score covers only those tests and is not comparable with a full run.`,
+          ]),
+        ]),
+      );
+    }
+    output.append(renderView(data, doc));
+  };
+
   const run = async (): Promise<void> => {
     button.setAttribute("disabled", "");
     output.replaceChildren();
@@ -61,14 +107,13 @@ export function mountRun(doc: Document): void {
       el(doc, "p", { class: "md-body-medium" }, ["Running. Keep this page open until the result appears."]),
     ]);
     try {
-      const res = await fetch("./api/run", { cache: "no-store" });
+      const res = await fetch(apiUrl, { cache: "no-store" });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
         showError(body.error ?? `The run failed with HTTP ${res.status}.`);
         return;
       }
-      setStatus([]);
-      output.append(renderView(documentFrom(body), doc));
+      showResult(body);
     } catch (err) {
       showError(`The run could not finish: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -81,17 +126,19 @@ export function mountRun(doc: Document): void {
   doc.body.append(main, footer(doc));
 
   // A result file can be opened here as well: run.html?result=./result.json (same origin only).
-  const param = new URLSearchParams(window.location.search).get("result");
-  if (param) {
+  const resultParam = params.get("result");
+  if (resultParam) {
     setStatus([el(doc, "p", { class: "md-body-medium" }, ["Loading the result file."])]);
     Promise.resolve()
-      .then(() => fetch(resolveResultUrl(param, window.location.href), { cache: "no-store" }))
+      .then(() => fetch(resolveResultUrl(resultParam, window.location.href), { cache: "no-store" }))
       .then(async (res) => {
         if (!res.ok) throw new Error(`could not load result: HTTP ${res.status}`);
-        setStatus([]);
-        output.append(renderView(documentFrom(await res.json()), doc));
+        showResult(await res.json());
       })
       .catch((err: unknown) => showError(err instanceof Error ? err.message : String(err)));
+  } else if (autostart) {
+    // Launched from Start test: the user already asked for this run, so it starts without a second click.
+    void run();
   }
 }
 

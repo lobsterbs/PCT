@@ -13,6 +13,8 @@ export interface ResultDocument {
   readonly report: ScoreReport;
   readonly results: readonly TestResult[];
   readonly detection: { readonly attributions: readonly PassiveAttribution[]; readonly coverage?: readonly ProfileCoverageRow[] };
+  /** Present when the run covered only some tests. A partial run is not comparable with a full one. */
+  readonly selection?: { readonly full: boolean; readonly selected: number; readonly total: number };
 }
 
 export interface ProfileCoverageRow {

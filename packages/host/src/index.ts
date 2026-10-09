@@ -2,7 +2,7 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
-import { executeRun } from "@pct/cli";
+import { executeRun, profileTestIds } from "@pct/cli";
 import { BREAKS, startReferenceProxy, type Break } from "@pct/reference-proxy";
 
 /**
@@ -100,7 +100,7 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
     return true;
   };
 
-  async function runAgainstReference(breaks: Break[]): Promise<Record<string, unknown>> {
+  async function runAgainstReference(breaks: Break[], testIds: string[] | undefined, detect: boolean): Promise<Record<string, unknown>> {
     const originPort = await freePort();
     const proxy = await startReferenceProxy({
       allowOrigins: [`http://127.0.0.1:${originPort}`, `http://localhost:${originPort}`],
@@ -113,7 +113,8 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
         timeoutMs: runTimeoutMs,
         engine: "reference-proxy",
         engineVersion: "0.1.0",
-        detect: true,
+        detect,
+        ...(testIds ? { testIds } : {}),
       });
       return r.document;
     } finally {
@@ -132,6 +133,11 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
       res.end("ok");
       return;
     }
+    if (url.pathname === "/api/tests") {
+      // The selectable tests come from the same profile the run uses, so the page cannot offer a test that will not run.
+      sendJson(res, 200, { tests: profileTestIds("http-quick") });
+      return;
+    }
     if (url.pathname === "/api/run") {
       const raw = url.searchParams.get("breaks") ?? "";
       const breaks = raw === "" ? [] : raw.split(",");
@@ -141,6 +147,23 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
       }
       // Behind Render's proxy the last X-Forwarded-For entry is the address the proxy saw. The first entry is
       // whatever the client sent, so trusting it would let a client pick a new address on every request.
+      // Selection: absent means every test. Present means a comma list of known ids, at least one.
+      const known = new Set(profileTestIds("http-quick"));
+      const rawTests = url.searchParams.get("tests");
+      let testIds: string[] | undefined;
+      if (rawTests !== null) {
+        testIds = rawTests === "" ? [] : rawTests.split(",");
+        if (testIds.length === 0 || !testIds.every((id) => known.has(id)) || new Set(testIds).size !== testIds.length) {
+          sendJson(res, 400, { error: "tests must be a non-empty list of known, unique test ids" });
+          return;
+        }
+      }
+      const rawDetect = url.searchParams.get("detect") ?? "1";
+      if (rawDetect !== "0" && rawDetect !== "1") {
+        sendJson(res, 400, { error: "detect must be 0 or 1" });
+        return;
+      }
+      const detect = rawDetect === "1";
       const forwarded = String(req.headers["x-forwarded-for"] ?? "")
         .split(",")
         .map((s) => s.trim())
@@ -156,7 +179,7 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
       }
       busy = true;
       try {
-        sendJson(res, 200, await runAgainstReference(breaks as Break[]));
+        sendJson(res, 200, await runAgainstReference(breaks as Break[], testIds, detect));
       } catch (err) {
         sendJson(res, 500, { error: (err as Error).message });
       } finally {

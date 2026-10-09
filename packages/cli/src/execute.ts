@@ -38,6 +38,8 @@ export interface RunOptions {
   readonly timeoutMs?: number;
   readonly minScore?: number;
   readonly detect?: boolean;
+  /** Test ids to run. Default: every test in the profile. A subset is reported as a partial run. */
+  readonly testIds?: readonly string[];
 }
 
 export interface RunResult {
@@ -48,6 +50,13 @@ export interface RunResult {
 
 const PROBE_BODY_LIMIT = 256 * 1024;
 const RUN_TTL_MS = 60 * 60 * 1000;
+
+/** Ids of every test in a profile, for validating a selection before a run starts. */
+export function profileTestIds(profile: string): string[] {
+  const tests = PROFILES[profile];
+  if (!tests) throw new Error(`unknown profile "${profile}"`);
+  return tests.map((t) => t.def.id);
+}
 
 export function normalizeProxy(raw: string): string {
   let url: URL;
@@ -93,6 +102,8 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
   const profileName = opts.profile ?? "http-quick";
   const tests = PROFILES[profileName];
   if (!tests) throw new Error(`unknown profile "${profileName}". available: ${Object.keys(PROFILES).join(", ")}`);
+  const selected = opts.testIds ? tests.filter((t) => opts.testIds!.includes(t.def.id)) : tests;
+  if (selected.length === 0) throw new Error("no tests selected");
   const timeoutMs = opts.timeoutMs ?? 15000;
   const secret = opts.secret ?? newSecret();
   // The public run id is the session's random id. The secret stays here and in the origin.
@@ -118,7 +129,7 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       timeoutMs,
       profile: profileName,
       suiteVersion: SUITE_VERSION,
-      tests,
+      tests: selected,
     });
 
     // Coverage says what this run could observe. A "no match" for a browser-only profile is not a verdict.
@@ -149,6 +160,8 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
         suiteVersion: SUITE_VERSION,
         profile: profileName,
         manifestHash: run.manifest.hash,
+        // A partial run covers only the selected tests. Its score is not comparable with a full run.
+        selection: { full: selected.length === tests.length, selected: selected.length, total: tests.length },
       },
       proxy: { url: proxyBase },
       declared: opts.engine ? { engine: opts.engine, version: opts.engineVersion ?? null } : null,

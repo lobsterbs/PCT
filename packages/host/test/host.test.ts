@@ -82,3 +82,33 @@ test("the result document says which engines the run could not observe", async (
     assert.equal(alloy?.observable, "browser", "Alloy needs a browser, so the HTTP run cannot check it");
   }, { rateMax: 5 });
 });
+
+test("lists the selectable tests from the same profile the run uses", async () => {
+  await withHost(async (base) => {
+    const body = (await (await fetch(`${base}/api/tests`)).json()) as { tests: string[] };
+    assert.equal(body.tests.length, 19, "the quick profile has 19 tests");
+    assert.ok(body.tests.includes("networking.get.001"));
+  });
+});
+
+test("a selection runs only the chosen tests and says the run is partial", async () => {
+  await withHost(async (base) => {
+    const res = await fetch(`${base}/api/run?tests=networking.get.001,html.text-node.001&detect=0`);
+    assert.equal(res.status, 200);
+    const doc = (await res.json()) as { results: { id: string }[]; benchmark: { selection: { full: boolean; selected: number; total: number } }; detection: { attributions: unknown[] } };
+    assert.deepEqual(doc.results.map((r) => r.id).sort(), ["html.text-node.001", "networking.get.001"]);
+    assert.equal(doc.benchmark.selection.full, false);
+    assert.equal(doc.benchmark.selection.selected, 2);
+    assert.equal(doc.benchmark.selection.total, 19);
+    assert.deepEqual(doc.detection.attributions, [], "detect=0 skips the passive probes");
+  }, { rateMax: 5 });
+});
+
+test("rejects an unknown, duplicate, or empty test selection, and a bad detect flag", async () => {
+  await withHost(async (base) => {
+    assert.equal((await fetch(`${base}/api/run?tests=not.a.test`)).status, 400);
+    assert.equal((await fetch(`${base}/api/run?tests=networking.get.001,networking.get.001`)).status, 400);
+    assert.equal((await fetch(`${base}/api/run?tests=`)).status, 400);
+    assert.equal((await fetch(`${base}/api/run?detect=yes`)).status, 400);
+  }, { rateMax: 10 });
+});

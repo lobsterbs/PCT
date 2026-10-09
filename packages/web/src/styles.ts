@@ -128,6 +128,32 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
   border-radius: 24px;
   padding: 8px 0;
 }
+/* Start page: a wide navigation rail on the left, the section on the right. */
+.pct-shell { display: flex; min-height: 100vh; box-sizing: border-box; }
+.pct-shell md-navigation-rail { flex: none; background: var(--md-sys-color-surface); }
+.pct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pct-pane { box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; padding: 32px 16px 16px; }
+.pct-pane[hidden] { display: none !important; }
+.pct-home { align-items: center; justify-content: center; flex: 1; text-align: center; }
+.pct-wordmark {
+  margin: 0;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: clamp(14px, 4vw, 26px);
+  line-height: 1.15;
+  color: var(--md-sys-color-primary);
+  text-align: left;
+  white-space: pre;
+  max-width: 100%;
+  overflow-x: auto;
+}
+.pct-status-line { margin: 0; color: var(--md-sys-color-error); min-height: 1.5em; }
+.pct-hint { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 48ch; }
+.pct-info { max-width: 960px; width: 100%; margin: 0 auto; }
+.pct-main footer { margin-top: auto; }
+.pct-wavy { display: block; width: 100%; --md-sys-color-primary: var(--md-sys-color-outline-variant); }
+.pct-partial { padding: 24px; box-sizing: border-box; }
+.pct-partial p { margin: 0 0 8px; }
+.pct-partial p:last-child { margin-bottom: 0; }
 `;
 
 /** Injects the page styles once. */
