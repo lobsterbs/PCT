@@ -99,3 +99,15 @@ test("checkDeclared: consistent, conflict, no-attribution, undeclared", () => {
   assert.deepEqual(checkDeclared("Zeolite", []), { kind: "no-attribution", declared: "Zeolite" });
   assert.deepEqual(checkDeclared(undefined, [attr]), { kind: "undeclared" });
 });
+
+test("coverage: browser-only profiles are reported as such, and probeless ones are not claimed as checked", async () => {
+  const { profileCoverage, PROFILES } = await import("../src/index.js");
+  const cov = Object.fromEntries(profileCoverage(PROFILES).map((c) => [c.engine, c]));
+  assert.equal(cov["Alloy"]!.observable, "browser", "Alloy only has page-global signals");
+  assert.equal(cov["Epoxy"]!.observable, "browser", "Epoxy only has page-global signals");
+  assert.equal(cov["Chemical"]!.probeless, true, "Chemical sends no probe of its own");
+  assert.equal(cov["Dynamic"]!.probeless, true, "Dynamic sends no probe of its own");
+  assert.equal(cov["Zeolite"]!.observable, "http");
+  assert.equal(cov["Zeolite"]!.probeless, false);
+  assert.equal(Object.keys(cov).length, PROFILES.length, "every shipped profile has a coverage entry");
+});

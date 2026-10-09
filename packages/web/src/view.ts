@@ -12,7 +12,13 @@ export interface PassiveAttribution {
 export interface ResultDocument {
   readonly report: ScoreReport;
   readonly results: readonly TestResult[];
-  readonly detection: { readonly attributions: readonly PassiveAttribution[] };
+  readonly detection: { readonly attributions: readonly PassiveAttribution[]; readonly coverage?: readonly ProfileCoverageRow[] };
+}
+
+export interface ProfileCoverageRow {
+  readonly engine: string;
+  readonly observable: "http" | "browser";
+  readonly probeless: boolean;
 }
 
 /** Filter indexes match the md-segmented-button items: All, Failed, Partial, Passed. */
@@ -81,6 +87,21 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
       );
     }
     detectionPanel.append(found);
+  }
+
+  // A "no match" only means something for engines this run could observe. Say which ones it could not.
+  const coverage = result.detection.coverage ?? [];
+  const browserOnly = coverage.filter((c) => c.observable === "browser").map((c) => c.engine);
+  const probeless = coverage.filter((c) => c.observable === "http" && c.probeless).map((c) => c.engine);
+  if (browserOnly.length > 0) {
+    detectionPanel.append(
+      el(doc, "p", { class: "md-body-medium" }, [`Not checked over HTTP, because these engines only match in a browser: ${browserOnly.join(", ")}.`]),
+    );
+  }
+  if (probeless.length > 0) {
+    detectionPanel.append(
+      el(doc, "p", { class: "md-body-medium" }, [`Checked only if the run happened to fetch their files: ${probeless.join(", ")}.`]),
+    );
   }
 
   const panels = [scorePanel, testsPanel, detectionPanel];

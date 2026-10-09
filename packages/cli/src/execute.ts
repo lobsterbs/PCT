@@ -4,6 +4,8 @@ import {
   PROFILES as DETECTION_PROFILES,
   checkDeclared,
   inferEngines,
+  profileCoverage,
+  type ProfileCoverage,
   type Attribution,
   type DeclaredCheck,
   type HttpSnapshot,
@@ -119,10 +121,13 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       tests,
     });
 
-    let detection: { attributions: Attribution[]; declaredCheck: DeclaredCheck; probes: unknown[] } = {
+    // Coverage says what this run could observe. A "no match" for a browser-only profile is not a verdict.
+    const coverage = profileCoverage(DETECTION_PROFILES);
+    let detection: { attributions: Attribution[]; declaredCheck: DeclaredCheck; probes: unknown[]; coverage: ProfileCoverage[] } = {
       attributions: [],
       declaredCheck: { kind: "undeclared" },
       probes: [],
+      coverage,
     };
     if (opts.detect !== false) {
       const probes = await collectProbes(proxyBase, origin1, timeoutMs);
@@ -131,6 +136,7 @@ export async function executeRun(opts: RunOptions): Promise<RunResult> {
       const attributions = inferEngines(obs, DETECTION_PROFILES);
       detection = {
         attributions,
+        coverage,
         declaredCheck: checkDeclared(opts.engine, attributions),
         probes: probes.map((p) => ({ url: p.url, status: p.status, error: p.error ?? null })),
       };

@@ -4,19 +4,22 @@ import type { ScoreReport } from "@pct/core";
 import { appBar, footer, setupPage } from "./chrome.js";
 import { el } from "./render.js";
 import { resolveResultUrl } from "./url.js";
-import { renderView, type ResultDocument } from "./view.js";
+import { renderView, type ProfileCoverageRow, type ResultDocument } from "./view.js";
 
 /** Accepts the JSON written by `pct run --json` or returned by the hosted run. Anything else is rejected. */
 export function documentFrom(json: unknown): ResultDocument {
   if (!json || typeof json !== "object" || !("report" in json) || !("results" in json)) {
     throw new Error("not a PCT result document");
   }
-  const d = json as { report: ScoreReport; results: unknown; detection?: { attributions?: unknown } };
+  const d = json as { report: ScoreReport; results: unknown; detection?: { attributions?: unknown; coverage?: unknown } };
   const results = Array.isArray(d.results) ? (d.results as ResultDocument["results"]) : [];
   const attributions = Array.isArray(d.detection?.attributions)
     ? (d.detection?.attributions as ResultDocument["detection"]["attributions"])
     : [];
-  return { report: d.report, results, detection: { attributions } };
+  const coverage = Array.isArray(d.detection?.coverage)
+    ? (d.detection?.coverage as ProfileCoverageRow[])
+    : undefined;
+  return { report: d.report, results, detection: { attributions, ...(coverage ? { coverage } : {}) } };
 }
 
 /** The benchmark page. Starts a run on the host, shows progress, and renders the result here only. */

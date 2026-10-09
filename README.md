@@ -19,7 +19,7 @@ side. The Rust detection profiles and CLI are not built. See "Not built yet".
 | Reference proxy with 9 breakages | packages/reference-proxy | built, tested |
 | Passive engine detection (11 profiles) | packages/detect | built, tested |
 | `pct run` CLI | packages/cli | built, tested |
-| Result viewer (dark theme, Material 3 Expressive) | packages/web | built, checked in headless Chromium; no automated viewer tests yet |
+| Start page, benchmark page, legal pages, result viewer (dark only, Material 3 Expressive) | packages/web | built, checked in headless Chromium at 390px and 1280px; no automated web tests yet |
 | Static site build | scripts/build-static.mjs | built, checked in headless Chromium |
 | Browser tier (`browser-quick`, 9 tests, real Chromium through the forward proxy) | packages/runner (browser-suite.ts) | built; all pass on the correct proxy and the expected breakages are caught (scripts/verify-browser.mjs; needs a Chromium binary, set PCT_CHROME) |
 | Hosted service (viewer and reference-proxy runs) | packages/host | built, tested, deployed to Render |
@@ -56,7 +56,9 @@ the same suite version, profile, and test revisions. The weights and caps are a 
 
 Detection answers "which engine might this be", with a confidence level and evidence. It never verifies,
 never changes a score, and never overwrites a declared engine. Each profile cites the source file it was
-written from. Profiles cover Zeolite, Ultraviolet, Scramjet, Corrosion, Rammerhead, Bare, Dip, Alloy, Epoxy,
+written from. The result also reports coverage: Alloy and Epoxy only match in a browser, and Chemical and Dynamic
+only match if the run happened to fetch their files. A "no match" is only a verdict for engines the run could observe.
+Profiles cover Zeolite, Ultraviolet, Scramjet, Corrosion, Rammerhead, Bare, Dip, Alloy, Epoxy,
 Chemical, and Dynamic. Several engines are only detectable inside a browser, and the profiles say so.
 
 ## Security model
@@ -92,7 +94,10 @@ the content checks cover that.
 Render service `pct-host` (web service, free plan, Oregon) runs the whole hosted part from one build:
 it serves the result viewer and runs benchmarks against the built-in reference proxy.
 
-    GET /                          the result viewer
+    GET /                          start page: what PCT is, a button to start, links to the legal pages
+    GET /run.html                  benchmark page: runs the HTTP suite and shows the result on the page
+    GET /terms.html                Terms of Service (draft, not reviewed by a lawyer)
+    GET /privacy.html              Privacy Policy (draft, not reviewed by a lawyer)
     GET /api/run?breaks=a,b        runs the suite against the reference proxy with up to 3 breakages
     GET /healthz                   health check
 

@@ -37,3 +37,23 @@ export function inferEngines(obs: Observations, profiles: readonly EngineProfile
   const rank: Record<Confidence, number> = { high: 3, medium: 2, low: 1 };
   return out.sort((a, b) => rank[b.confidence] - rank[a.confidence] || a.engine.localeCompare(b.engine));
 }
+
+/**
+ * What a run could possibly observe for each profile. Derived from the signal families, so it cannot drift from the
+ * profiles themselves. A "no match" for a browser-only profile means it was not checked, not that it is absent.
+ */
+export interface ProfileCoverage {
+  readonly engine: string;
+  /** "http" when at least one signal reads HTTP responses. "browser" when every signal needs the page. */
+  readonly observable: "http" | "browser";
+  /** True when the profile sends no probe of its own, so it only matches responses the run happened to make. */
+  readonly probeless: boolean;
+}
+
+export function profileCoverage(profiles: readonly EngineProfile[]): ProfileCoverage[] {
+  return profiles.map((p) => ({
+    engine: p.engine,
+    observable: p.signals.some((s) => s.family !== "page-global") ? "http" : "browser",
+    probeless: p.probes.length === 0,
+  }));
+}
