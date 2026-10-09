@@ -8,7 +8,7 @@ export function setupPage(doc: Document): void {
   applyStyles(doc);
 }
 
-/** The top app bar the benchmark and legal pages share. The start page has none. */
+/** The top app bar the legal pages use. The start page and the benchmark page have none. */
 export function appBar(doc: Document, headline: string, subtitle: string): HTMLElement {
   return el(doc, "md-top-app-bar", {
     variant: "small",
@@ -16,6 +16,56 @@ export function appBar(doc: Document, headline: string, subtitle: string): HTMLE
     subtitle,
     "aria-label": headline,
   });
+}
+
+/** One entry of the navigation rail. `icon` is a Material Symbols Rounded ligature name. */
+export interface Section {
+  readonly label: string;
+  readonly icon: string;
+  readonly href: string;
+}
+
+/** Every section of the site, in rail order. Home and Information are the start page's panes. */
+export const SECTIONS: readonly Section[] = [
+  { label: "Home", icon: "home", href: "./index.html" },
+  { label: "Information", icon: "info", href: "./index.html#information" },
+  { label: "Benchmark", icon: "play_arrow", href: "./run.html" },
+];
+
+/**
+ * The expandable navigation rail shared by every page. With no `onChange`, choosing an item other than the
+ * selected one navigates to its href. The header button widens the rail so the labels show.
+ */
+export function navRail(
+  doc: Document,
+  sections: readonly Section[],
+  selected: number,
+  onChange?: (index: number) => void,
+): HTMLElement {
+  const rail = el(doc, "md-navigation-rail", { selected: String(selected), "aria-label": "Sections" });
+  rail.setAttribute("items", JSON.stringify(sections.map((s) => ({ label: s.label, icon: s.icon }))));
+  const toggle = el(doc, "md-button", { slot: "header", variant: "text", label: "Expand" });
+  toggle.addEventListener("click", () => {
+    const expanded = rail.hasAttribute("expanded");
+    rail.toggleAttribute("expanded", !expanded);
+    toggle.setAttribute("label", expanded ? "Expand" : "Collapse");
+  });
+  rail.append(toggle);
+  rail.addEventListener("change", (e) => {
+    const index = (e as CustomEvent<{ index: number }>).detail.index;
+    if (onChange) {
+      onChange(index);
+      return;
+    }
+    const target = sections[index];
+    if (target && index !== selected) window.location.href = target.href;
+  });
+  return rail;
+}
+
+/** The page shell: the rail on the left, the page content on the right. */
+export function shell(doc: Document, rail: HTMLElement, main: HTMLElement): HTMLElement {
+  return el(doc, "div", { class: "pct-shell" }, [rail, main]);
 }
 
 /**

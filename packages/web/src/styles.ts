@@ -149,8 +149,18 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
 .pct-status-line { margin: 0; color: var(--md-sys-color-error); min-height: 1.5em; }
 .pct-hint { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 48ch; }
 .pct-info { max-width: 960px; width: 100%; margin: 0 auto; }
-.pct-main footer { margin-top: auto; }
-.pct-wavy { display: block; width: 100%; --md-sys-color-primary: var(--md-sys-color-outline-variant); }
+/* The footer sits at the bottom of the viewport. The wave, links and notice move down together. */
+.pct-main .pct-footer { margin-top: auto; padding-top: 64px; padding-bottom: 40px; }
+.pct-wavy { display: block; width: 100%; margin-bottom: 24px; --md-sys-color-primary: var(--md-sys-color-outline-variant); }
+.pct-bench { max-width: 960px; width: 100%; margin: 0 auto; }
+.pct-bench-head { display: flex; flex-direction: column; gap: 8px; }
+.pct-bench-head h1 { margin: 0; color: var(--md-sys-color-on-surface); }
+.pct-bench-head p { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 64ch; }
+.pct-config { display: flex; flex-direction: column; gap: 6px; padding: 24px; box-sizing: border-box; }
+.pct-config p { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+.pct-config p.md-title-medium { color: var(--md-sys-color-on-surface); }
+.pct-config-link { align-self: flex-start; margin-top: 4px; }
+.pct-run-row { display: flex; }
 .pct-partial { padding: 24px; box-sizing: border-box; }
 .pct-partial p { margin: 0 0 8px; }
 .pct-partial p:last-child { margin-bottom: 0; }

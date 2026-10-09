@@ -1,7 +1,7 @@
 // Side-effect import registers the md3e custom elements on the page.
 import "@materialwebunofficial/md3e-web";
 import type { ScoreReport } from "@pct/core";
-import { appBar, footer, setupPage } from "./chrome.js";
+import { SECTIONS, footer, navRail, setupPage, shell } from "./chrome.js";
 import { el } from "./render.js";
 import { resolveResultUrl } from "./url.js";
 import { renderView, type ProfileCoverageRow, type ResultDocument } from "./view.js";
@@ -35,10 +35,9 @@ export function documentFrom(json: unknown): ResultDocument {
   };
 }
 
-/** The benchmark page. Runs the selection it was given, shows progress, and renders the result here only. */
+/** The benchmark page, in the same shell as the start page. Runs the selection it was given and shows the result here. */
 export function mountRun(doc: Document): void {
   setupPage(doc);
-  doc.body.append(appBar(doc, "Benchmark", "Built-in reference proxy"));
 
   const params = new URLSearchParams(window.location.search);
   const tests = params.get("tests");
@@ -56,18 +55,22 @@ export function mountRun(doc: Document): void {
     testCount === null ? "Every test in the quick HTTP suite" : `${testCount} selected test${testCount === 1 ? "" : "s"}`;
   const detectionText = detect ? "Passive detection is on." : "Passive detection is off.";
 
-  const main = el(doc, "main", { class: "pct-page" });
-  const back = el(doc, "a", { class: "pct-link md-label-large", href: "./index.html" }, ["Back to start"]);
-
-  const intro = el(doc, "section", { class: "pct-intro" }, [
-    el(doc, "h1", { class: "md-headline-medium" }, ["Run the benchmark"]),
+  const header = el(doc, "section", { class: "pct-bench-head" }, [
+    el(doc, "h1", { class: "md-display-small" }, ["Benchmark"]),
     el(doc, "p", { class: "md-body-large" }, [
-      `${selectionText}, against the built-in reference proxy. ${detectionText} It does not test a proxy you enter.`,
+      "Runs against the built-in reference proxy. It does not test a proxy you enter.",
     ]),
   ]);
 
-  const button = el(doc, "md-button", { variant: "filled", id: "run" }, []);
+  const config = el(doc, "md-card", { variant: "filled", class: "pct-config", "aria-label": "This run" }, [
+    el(doc, "p", { class: "md-title-medium" }, [selectionText]),
+    el(doc, "p", { class: "md-body-medium" }, [detectionText]),
+    el(doc, "a", { class: "pct-link md-label-large pct-config-link", href: "./index.html" }, ["Change the tests"]),
+  ]);
+
+  const button = el(doc, "md-button", { variant: "filled", size: "m", id: "run" }, []);
   button.setAttribute("label", "Run benchmark");
+  const actions = el(doc, "div", { class: "pct-run-row" }, [button]);
 
   const status = el(doc, "div", { class: "pct-status", role: "status", "aria-live": "polite" });
   const output = el(doc, "div", { class: "pct-output" });
@@ -122,8 +125,12 @@ export function mountRun(doc: Document): void {
   };
   button.addEventListener("click", () => void run());
 
-  main.append(back, intro, button, status, output);
-  doc.body.append(main, footer(doc));
+  const pane = el(doc, "section", { class: "pct-pane pct-bench" }, [header, config, actions, status, output]);
+  const main = el(doc, "main", { class: "pct-main" }, [pane, footer(doc)]);
+
+  // Benchmark is the selected section here. Home and Information navigate back to the start page.
+  const rail = navRail(doc, SECTIONS, 2);
+  doc.body.append(shell(doc, rail, main));
 
   // A result file can be opened here as well: run.html?result=./result.json (same origin only).
   const resultParam = params.get("result");
