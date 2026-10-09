@@ -13,8 +13,6 @@ export interface ResultDocument {
   readonly report: ScoreReport;
   readonly results: readonly TestResult[];
   readonly detection: { readonly attributions: readonly PassiveAttribution[] };
-  /** True for built-in sample data. The page says so. */
-  readonly sample?: boolean;
 }
 
 /** Filter indexes match the md-segmented-button items: All, Failed, Partial, Passed. */
@@ -25,14 +23,6 @@ export function matchesFilter(index: number, status: string): boolean {
   return true;
 }
 
-/** Badge shape by grade. Names are from md3e's canonical shape catalog (see md-shape). */
-export function shapeFor(grade: string | undefined): string {
-  if (!grade) return "sunny";
-  if (grade.startsWith("A")) return "flower";
-  if (grade.startsWith("B") || grade.startsWith("C")) return "soft-burst";
-  return "burst";
-}
-
 export function renderView(result: ResultDocument, doc: Document): HTMLElement {
   const root = el(doc, "section", { class: "pct-view" });
   const tabs = el(doc, "md-tabs", {
@@ -40,14 +30,9 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
     "aria-label": "Result sections",
   });
 
-  // Score panel: badge, the hero card (from render.ts), and the category list.
+  // Score panel: the hero card (from render.ts) and the category list.
   const scorePanel = el(doc, "div", { class: "pct-panel", role: "tabpanel" });
-  const grade = result.report.valid ? result.report.grade : undefined;
-  const report = renderReport(result.report, doc);
-  // The grade badge sits inside the hero card, not floating above it.
-  const hero = report.querySelector(".pct-hero");
-  if (hero) hero.prepend(el(doc, "md-shape", { name: shapeFor(grade), class: "pct-badge" }));
-  scorePanel.append(report);
+  scorePanel.append(renderReport(result.report, doc));
 
   // Tests panel: segmented filter over the individual results, each entry animated in.
   const testsPanel = el(doc, "div", { class: "pct-panel", role: "tabpanel", hidden: "" });
@@ -107,9 +92,5 @@ export function renderView(result: ResultDocument, doc: Document): HTMLElement {
   });
 
   root.append(tabs, ...panels);
-  if (result.sample) {
-    // Inline, not a snackbar: a floating notice would cover the content it is warning about.
-    root.prepend(el(doc, "div", { class: "pct-sample", role: "status" }, ["Sample data. Not a benchmark result."]));
-  }
   return root;
 }

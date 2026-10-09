@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/copy-notices.mjs",
+    "build": "rm -rf dist && tsc -p tsconfig.json && node scripts/copy-notices.mjs",
     "notices": "node scripts/copy-notices.mjs"
   },
   "dependencies": {

@@ -2,6 +2,7 @@
  * Page styles. Every color comes from the md3e design tokens, so the dark theme is applied in one place.
  * Surfaces step up from the page background (surface, surface-container-low, surface-container,
  * surface-container-high) so the hierarchy reads without borders.
+ * Touch targets are at least 48dp tall (links, buttons); the page gutter is 16px on phones.
  */
 export const STYLES = `
 html { color-scheme: dark; background: var(--md-sys-color-surface); }
@@ -10,11 +11,94 @@ body { margin: 0; background: var(--md-sys-color-surface); color: var(--md-sys-c
 
 md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); }
 
-.pct-view {
+.pct-page {
   box-sizing: border-box;
+  width: 100%;
   max-width: 960px;
   margin: 0 auto;
-  padding: 24px 16px 120px;
+  padding: 24px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.pct-intro { display: flex; flex-direction: column; gap: 12px; }
+.pct-intro h1 { margin: 0; color: var(--md-sys-color-on-surface); }
+.pct-intro p { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 64ch; }
+.pct-start { align-self: flex-start; min-height: 48px; }
+
+.pct-cards { display: grid; grid-template-columns: 1fr; gap: 16px; }
+@media (min-width: 840px) { .pct-cards { grid-template-columns: repeat(3, 1fr); } }
+.pct-card { display: flex; flex-direction: column; gap: 12px; padding: 24px; box-sizing: border-box; }
+.pct-card h2 { margin: 0; color: var(--md-sys-color-on-surface); }
+.pct-card ul {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.pct-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: 24px;
+  color: var(--md-sys-color-primary);
+  text-decoration: none;
+}
+.pct-link:focus-visible { outline: 2px solid var(--md-sys-color-primary); outline-offset: 2px; }
+.pct-back { align-self: flex-start; }
+
+.pct-footer {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pct-legal { display: flex; flex-wrap: wrap; gap: 8px; }
+.pct-fine { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+
+.pct-status { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.pct-status p { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+.pct-error { padding: 24px; box-sizing: border-box; }
+.pct-error p { margin: 0 0 8px; }
+.pct-error p:last-child { margin-bottom: 0; }
+
+.pct-doc {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--md-sys-color-on-surface);
+}
+.pct-doc h1 { margin: 8px 0 4px; }
+.pct-doc h2 { margin: 20px 0 0; }
+.pct-doc p, .pct-doc li { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+.pct-doc ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.pct-doc code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.95em; }
+.pct-doc .pct-draft {
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+.pct-output { display: flex; flex-direction: column; gap: 16px; }
+.pct-output .pct-view { padding: 0; }
+
+.pct-view {
+  box-sizing: border-box;
+  width: 100%;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -32,21 +116,12 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
   background: transparent;
   color: var(--md-sys-color-on-surface);
 }
-.pct-hero .pct-badge { width: 56px; height: 56px; margin-bottom: 8px; }
 .pct-hero .md-display-large { margin: 4px 0 12px; color: var(--md-sys-color-primary); }
 .pct-hero md-progress-indicator { width: 100%; }
 
 .pct-counts, .pct-caps { display: flex; flex-wrap: wrap; gap: 8px; }
 .pct-critical { color: var(--md-sys-color-error) !important; margin: 0; }
 .pct-invalid { padding: 24px; }
-.pct-sample {
-  align-self: flex-start;
-  padding: 8px 16px;
-  border-radius: 16px;
-  background: var(--md-sys-color-tertiary-container);
-  color: var(--md-sys-color-on-tertiary-container);
-  font-size: 14px;
-}
 
 .pct-report md-list {
   background: var(--md-sys-color-surface-container-low);
