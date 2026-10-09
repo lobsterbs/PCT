@@ -1,6 +1,6 @@
 // Side-effect import registers the md3e custom elements on the page.
 import "@materialwebunofficial/md3e-web";
-import { footer, setupPage } from "./chrome.js";
+import { SECTIONS, footer, navRail, setupPage, shell } from "./chrome.js";
 import { el } from "./render.js";
 import { enter } from "./motion.js";
 
@@ -17,8 +17,6 @@ export const WORDMARK = [
 /** Shown in the test menu next to the tests. Turning it off skips the passive detection probes. */
 export const DETECTION_LABEL = "Engine detection (passive)";
 
-const SECTIONS = ["Home", "Information"] as const;
-
 /**
  * The start page. Home holds the wordmark and the Start test split button. Information holds what PCT is.
  * Neither section shows results: a run opens the benchmark page.
@@ -32,7 +30,7 @@ export function mountHome(doc: Document): void {
   ]);
 
   // The split button: "Start test" runs the selection; the dropdown configures it.
-  const split = el(doc, "md-split-button", { label: "Start test", size: "l", id: "start" });
+  const split = el(doc, "md-split-button", { label: "Start test", size: "m", id: "start" });
   const ids: string[] = [];
   const off = new Set<string>();
 
@@ -122,27 +120,19 @@ export function mountHome(doc: Document): void {
     ]),
   ]);
 
-  const rail = el(doc, "md-navigation-rail", { selected: "0", "aria-label": "Sections" });
-  rail.setAttribute("items", JSON.stringify(SECTIONS.map((label) => ({ label }))));
-  // The header toggles the wide (expanded) rail, which shows the section labels in full.
-  const toggle = el(doc, "md-button", { slot: "header", variant: "text", label: "Expand" });
-  toggle.addEventListener("click", () => {
-    const expanded = rail.hasAttribute("expanded");
-    rail.toggleAttribute("expanded", !expanded);
-    toggle.setAttribute("label", expanded ? "Expand" : "Collapse");
-  });
-  rail.append(toggle);
-
+  // Home and Information are panes on this page. A #information link opens the Information pane directly.
   const panes = [homePane, infoPane];
-  rail.addEventListener("change", (e) => {
-    const index = (e as CustomEvent<{ index: number }>).detail.index;
+  const initial = window.location.hash === "#information" ? 1 : 0;
+  homePane.hidden = initial !== 0;
+  infoPane.hidden = initial !== 1;
+  const rail = navRail(doc, SECTIONS.slice(0, 2), initial, (index) => {
     panes.forEach((p, i) => {
       p.hidden = i !== index;
     });
   });
 
   const main = el(doc, "main", { class: "pct-main" }, [homePane, infoPane, footer(doc)]);
-  doc.body.append(el(doc, "div", { class: "pct-shell" }, [rail, main]));
+  doc.body.append(shell(doc, rail, main));
 
   // The test list comes from the host, so the menu cannot offer a test that the run would not execute.
   fetch("./api/tests", { cache: "no-store" })
