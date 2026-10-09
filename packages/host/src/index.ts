@@ -50,7 +50,15 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 /** Static files only from the site directory. Anything resolving outside it is a 404. */
 function serveStatic(siteDir: string, pathname: string, res: ServerResponse): void {
-  const rel = pathname === "/" ? "index.html" : decodeURIComponent(pathname).replace(/^\/+/, "");
+  // A malformed percent sequence (such as %E0%A4%A) makes decodeURIComponent throw. That is a client error, not a crash.
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    sendJson(res, 404, { error: "not found" });
+    return;
+  }
+  const rel = pathname === "/" ? "index.html" : decoded.replace(/^\/+/, "");
   const file = resolve(siteDir, rel);
   if (!file.startsWith(resolve(siteDir) + sep) || !existsSync(file) || !statSync(file).isFile()) {
     sendJson(res, 404, { error: "not found" });
@@ -73,7 +81,15 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
   const hits = new Map<string, number[]>();
   let busy = false;
 
+  // Drops addresses with no hits left in the window, so the map cannot grow without bound.
+  const prune = (now: number): void => {
+    for (const [ip, times] of hits) {
+      if (!times.some((t) => now - t < rateWindowMs)) hits.delete(ip);
+    }
+  };
+
   const allowed = (ip: string, now: number): boolean => {
+    if (hits.size > 5_000) prune(now);
     const recent = (hits.get(ip) ?? []).filter((t) => now - t < rateWindowMs);
     if (recent.length >= rateMax) {
       hits.set(ip, recent);
@@ -105,7 +121,7 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
     }
   }
 
-  const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+  const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const url = new URL(req.url ?? "/", "http://host.invalid");
     if (req.method !== "GET" && req.method !== "HEAD") {
       sendJson(res, 405, { error: "method not allowed" });
@@ -123,7 +139,13 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
         sendJson(res, 400, { error: `breaks must be up to ${MAX_BREAKS} of: ${BREAKS.join(", ")}` });
         return;
       }
-      const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "unknown").split(",")[0]!.trim();
+      // Behind Render's proxy the last X-Forwarded-For entry is the address the proxy saw. The first entry is
+      // whatever the client sent, so trusting it would let a client pick a new address on every request.
+      const forwarded = String(req.headers["x-forwarded-for"] ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s !== "");
+      const ip = forwarded.at(-1) ?? req.socket.remoteAddress ?? "unknown";
       if (!allowed(ip, Date.now())) {
         sendJson(res, 429, { error: "too many runs; try again later" });
         return;
@@ -143,6 +165,14 @@ export function createHost(opts: HostOptions): { server: Server; close(): Promis
       return;
     }
     serveStatic(opts.siteDir, url.pathname, res);
+  };
+
+  // No request may crash the process. Any error that escapes a handler becomes a 500.
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    handle(req, res).catch(() => {
+      if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
+      else res.end();
+    });
   });
 
   return {

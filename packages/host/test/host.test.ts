@@ -58,3 +58,27 @@ test("rate limits runs per client address", async () => {
     assert.equal((await fetch(`${base}/api/run`)).status, 429);
   }, { rateMax: 1 });
 });
+
+test("a malformed percent sequence is a 404, and the host keeps serving", async () => {
+  await withHost(async (base) => {
+    assert.equal((await fetch(`${base}/%E0%A4%A`)).status, 404);
+    assert.equal(await (await fetch(`${base}/healthz`)).text(), "ok");
+  });
+});
+
+test("the rate limit keys on the address the proxy appended, not on a spoofed first entry", async () => {
+  await withHost(async (base) => {
+    const run = (spoof: string) =>
+      fetch(`${base}/api/run`, { headers: { "x-forwarded-for": `${spoof}, 203.0.113.7` } });
+    assert.equal((await run("198.51.100.1")).status, 200);
+    assert.equal((await run("198.51.100.2")).status, 429, "a new spoofed first entry does not get a fresh allowance");
+  }, { rateMax: 1 });
+});
+
+test("the result document says which engines the run could not observe", async () => {
+  await withHost(async (base) => {
+    const doc = (await (await fetch(`${base}/api/run`)).json()) as { detection: { coverage: { engine: string; observable: string }[] } };
+    const alloy = doc.detection.coverage.find((c) => c.engine === "Alloy");
+    assert.equal(alloy?.observable, "browser", "Alloy needs a browser, so the HTTP run cannot check it");
+  }, { rateMax: 5 });
+});
