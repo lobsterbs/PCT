@@ -1,6 +1,6 @@
 // Side-effect import registers the md3e custom elements on the page.
 import "@materialwebunofficial/md3e-web";
-import { SECTIONS, footer, navRail, setupPage, shell } from "./chrome.js";
+import { SECTIONS, footer, navigation, setupPage, shell } from "./chrome.js";
 import { el } from "./render.js";
 import { enter } from "./motion.js";
 
@@ -30,9 +30,18 @@ export function mountHome(doc: Document): void {
   ]);
 
   // The split button: "Start test" runs the selection; the dropdown configures it.
-  const split = el(doc, "md-split-button", { label: "Start test", size: "m", id: "start" });
+  const split = el(doc, "md-split-button", { label: "Start test", size: "s", icon: "play_arrow", id: "start" });
   const ids: string[] = [];
   const off = new Set<string>();
+
+  // md-split-button's menu has no height limit. With 20 entries it is about 800px tall: it stretches the page even
+  // while hidden and would run off a phone screen when open. Cap it and let it scroll. An adopted sheet survives
+  // the component re-rendering its shadow content.
+  if (split.shadowRoot && "adoptedStyleSheets" in split.shadowRoot) {
+    const cap = new CSSStyleSheet();
+    cap.replaceSync(".dropdown-menu { max-height: min(50vh, 360px); overflow-y: auto; overscroll-behavior: contain; }");
+    split.shadowRoot.adoptedStyleSheets = [...split.shadowRoot.adoptedStyleSheets, cap];
+  }
 
   const menuItems = (): HTMLElement[] => Array.from(split.shadowRoot?.querySelectorAll<HTMLElement>(".menu-item") ?? []);
 
@@ -94,11 +103,11 @@ export function mountHome(doc: Document): void {
   ]);
 
   const infoPane = el(doc, "section", { class: "pct-pane pct-info", "aria-label": "Information", hidden: "" }, [
-    el(doc, "h1", { class: "md-headline-medium" }, ["What a proxy does to your traffic"]),
-    el(doc, "p", { class: "md-body-large" }, [
+    el(doc, "h1", { class: "md-headline-small" }, ["What a proxy does to your traffic"]),
+    el(doc, "p", { class: "md-body-medium" }, [
       "PCT sends test requests through a web proxy and checks what comes back: status codes, headers, bodies, redirects, and cookies. In a real browser it also checks what a page can see.",
     ]),
-    el(doc, "p", { class: "md-body-large" }, [
+    el(doc, "p", { class: "md-body-medium" }, [
       "It is a behavioral benchmark. It checks what a proxy does, not what it claims to be.",
     ]),
     el(doc, "section", { class: "pct-cards", "aria-label": "About PCT" }, [
@@ -125,14 +134,14 @@ export function mountHome(doc: Document): void {
   const initial = window.location.hash === "#information" ? 1 : 0;
   homePane.hidden = initial !== 0;
   infoPane.hidden = initial !== 1;
-  const rail = navRail(doc, SECTIONS.slice(0, 2), initial, (index) => {
+  const nav = navigation(doc, SECTIONS.slice(0, 2), initial, (index) => {
     panes.forEach((p, i) => {
       p.hidden = i !== index;
     });
   });
 
   const main = el(doc, "main", { class: "pct-main" }, [homePane, infoPane, footer(doc)]);
-  doc.body.append(shell(doc, rail, main));
+  doc.body.append(shell(doc, nav, main));
 
   // The test list comes from the host, so the menu cannot offer a test that the run would not execute.
   fetch("./api/tests", { cache: "no-store" })

@@ -8,16 +8,6 @@ export function setupPage(doc: Document): void {
   applyStyles(doc);
 }
 
-/** The top app bar the legal pages use. The start page and the benchmark page have none. */
-export function appBar(doc: Document, headline: string, subtitle: string): HTMLElement {
-  return el(doc, "md-top-app-bar", {
-    variant: "small",
-    headline,
-    subtitle,
-    "aria-label": headline,
-  });
-}
-
 /** One entry of the navigation rail. `icon` is a Material Symbols Rounded ligature name. */
 export interface Section {
   readonly label: string;
@@ -32,40 +22,57 @@ export const SECTIONS: readonly Section[] = [
   { label: "Benchmark", icon: "play_arrow", href: "./run.html" },
 ];
 
+/** The site navigation: a rail on wide screens, a bottom bar on phones. Both show the same sections. */
+export interface Navigation {
+  readonly rail: HTMLElement;
+  readonly bar: HTMLElement;
+}
+
 /**
- * The expandable navigation rail shared by every page. With no `onChange`, choosing an item other than the
- * selected one navigates to its href. The header button widens the rail so the labels show.
+ * Builds the expandable rail and the phone bottom bar from one section list and keeps their selection in sync.
+ * With no `onChange`, choosing an item other than the selected one navigates to its href. The rail's header
+ * button widens it so the labels show. CSS picks which of the two is visible.
  */
-export function navRail(
+export function navigation(
   doc: Document,
   sections: readonly Section[],
   selected: number,
   onChange?: (index: number) => void,
-): HTMLElement {
-  const rail = el(doc, "md-navigation-rail", { selected: String(selected), "aria-label": "Sections" });
-  rail.setAttribute("items", JSON.stringify(sections.map((s) => ({ label: s.label, icon: s.icon }))));
-  const toggle = el(doc, "md-button", { slot: "header", variant: "text", label: "Expand" });
+): Navigation {
+  const items = JSON.stringify(sections.map((s) => ({ label: s.label, icon: s.icon })));
+  const rail = el(doc, "md-navigation-rail", { selected: String(selected), "aria-label": "Sections", class: "pct-rail" });
+  rail.setAttribute("items", items);
+  const toggle = el(doc, "md-button", { slot: "header", variant: "text", size: "xs", label: "Expand" });
   toggle.addEventListener("click", () => {
     const expanded = rail.hasAttribute("expanded");
     rail.toggleAttribute("expanded", !expanded);
     toggle.setAttribute("label", expanded ? "Expand" : "Collapse");
   });
   rail.append(toggle);
-  rail.addEventListener("change", (e) => {
-    const index = (e as CustomEvent<{ index: number }>).detail.index;
+
+  const bar = el(doc, "md-navigation-bar", { selected: String(selected), "aria-label": "Sections", class: "pct-bar" });
+  bar.setAttribute("items", items);
+
+  const choose = (index: number): void => {
+    // Setting the attribute does not fire change, so the two cannot loop.
+    rail.setAttribute("selected", String(index));
+    bar.setAttribute("selected", String(index));
     if (onChange) {
       onChange(index);
       return;
     }
     const target = sections[index];
     if (target && index !== selected) window.location.href = target.href;
-  });
-  return rail;
+  };
+  for (const nav of [rail, bar]) {
+    nav.addEventListener("change", (e) => choose((e as CustomEvent<{ index: number }>).detail.index));
+  }
+  return { rail, bar };
 }
 
-/** The page shell: the rail on the left, the page content on the right. */
-export function shell(doc: Document, rail: HTMLElement, main: HTMLElement): HTMLElement {
-  return el(doc, "div", { class: "pct-shell" }, [rail, main]);
+/** The page shell: the rail on the left, the page content on the right, the phone bar fixed at the bottom. */
+export function shell(doc: Document, nav: Navigation, main: HTMLElement): HTMLElement {
+  return el(doc, "div", { class: "pct-shell" }, [nav.rail, main, nav.bar]);
 }
 
 /**
