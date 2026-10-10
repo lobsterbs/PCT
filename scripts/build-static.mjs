@@ -121,11 +121,11 @@ function markdownToHtml(source) {
     } else if (line.startsWith("# ")) {
       flushPara();
       flushList();
-      out.push(`      <h1 class="md-headline-medium">${inline(line.slice(2))}</h1>`);
+      out.push(`      <h1 class="md-headline-small">${inline(line.slice(2))}</h1>`);
     } else if (line.startsWith("## ")) {
       flushPara();
       flushList();
-      out.push(`      <h2 class="md-title-large">${inline(line.slice(3))}</h2>`);
+      out.push(`      <h2 class="md-title-medium">${inline(line.slice(3))}</h2>`);
     } else if (line.startsWith("- ")) {
       flushPara();
       list.push(line.slice(2));

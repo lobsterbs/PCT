@@ -1,7 +1,7 @@
 // Side-effect import registers the md3e custom elements on the page.
 import "@materialwebunofficial/md3e-web";
 import type { ScoreReport } from "@pct/core";
-import { SECTIONS, footer, navRail, setupPage, shell } from "./chrome.js";
+import { SECTIONS, footer, navigation, setupPage, shell } from "./chrome.js";
 import { el } from "./render.js";
 import { resolveResultUrl } from "./url.js";
 import { renderView, type ProfileCoverageRow, type ResultDocument } from "./view.js";
@@ -56,8 +56,8 @@ export function mountRun(doc: Document): void {
   const detectionText = detect ? "Passive detection is on." : "Passive detection is off.";
 
   const header = el(doc, "section", { class: "pct-bench-head" }, [
-    el(doc, "h1", { class: "md-display-small" }, ["Benchmark"]),
-    el(doc, "p", { class: "md-body-large" }, [
+    el(doc, "h1", { class: "md-headline-small" }, ["Benchmark"]),
+    el(doc, "p", { class: "md-body-medium" }, [
       "Runs against the built-in reference proxy. It does not test a proxy you enter.",
     ]),
   ]);
@@ -68,7 +68,7 @@ export function mountRun(doc: Document): void {
     el(doc, "a", { class: "pct-link md-label-large pct-config-link", href: "./index.html" }, ["Change the tests"]),
   ]);
 
-  const button = el(doc, "md-button", { variant: "filled", size: "m", id: "run" }, []);
+  const button = el(doc, "md-button", { variant: "filled", id: "run" }, []);
   button.setAttribute("label", "Run benchmark");
   const actions = el(doc, "div", { class: "pct-run-row" }, [button]);
 
@@ -80,7 +80,7 @@ export function mountRun(doc: Document): void {
     setStatus([
       el(doc, "md-card", { variant: "outlined", class: "pct-error" }, [
         el(doc, "p", { class: "md-title-medium" }, ["No result"]),
-        el(doc, "p", { class: "md-body-large" }, [message]),
+        el(doc, "p", { class: "md-body-medium" }, [message]),
       ]),
     ]);
   };
@@ -129,8 +129,8 @@ export function mountRun(doc: Document): void {
   const main = el(doc, "main", { class: "pct-main" }, [pane, footer(doc)]);
 
   // Benchmark is the selected section here. Home and Information navigate back to the start page.
-  const rail = navRail(doc, SECTIONS, 2);
-  doc.body.append(shell(doc, rail, main));
+  const nav = navigation(doc, SECTIONS, 2);
+  doc.body.append(shell(doc, nav, main));
 
   // A result file can be opened here as well: run.html?result=./result.json (same origin only).
   const resultParam = params.get("result");

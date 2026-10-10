@@ -29,7 +29,7 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
 
 .pct-cards { display: grid; grid-template-columns: 1fr; gap: 16px; }
 @media (min-width: 840px) { .pct-cards { grid-template-columns: repeat(3, 1fr); } }
-.pct-card { display: flex; flex-direction: column; gap: 12px; padding: 24px; box-sizing: border-box; }
+.pct-card { display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
 .pct-card h2 { margin: 0; color: var(--md-sys-color-on-surface); }
 .pct-card ul {
   margin: 0;
@@ -67,7 +67,7 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
 
 .pct-status { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .pct-status p { margin: 0; color: var(--md-sys-color-on-surface-variant); }
-.pct-error { padding: 24px; box-sizing: border-box; }
+.pct-error { box-sizing: border-box; }
 .pct-error p { margin: 0 0 8px; }
 .pct-error p:last-child { margin-bottom: 0; }
 
@@ -112,16 +112,14 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 28px;
   background: transparent;
   color: var(--md-sys-color-on-surface);
 }
-.pct-hero .md-display-large { margin: 4px 0 12px; color: var(--md-sys-color-primary); }
+.pct-hero .md-display-small { margin: 4px 0 12px; color: var(--md-sys-color-primary); }
 .pct-hero md-progress-indicator { width: 100%; }
 
 .pct-counts, .pct-caps { display: flex; flex-wrap: wrap; gap: 8px; }
 .pct-critical { color: var(--md-sys-color-error) !important; margin: 0; }
-.pct-invalid { padding: 24px; }
 
 .pct-report md-list {
   background: var(--md-sys-color-surface-container-low);
@@ -132,13 +130,13 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
 .pct-shell { display: flex; min-height: 100vh; box-sizing: border-box; }
 .pct-shell md-navigation-rail { flex: none; background: var(--md-sys-color-surface); }
 .pct-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.pct-pane { box-sizing: border-box; display: flex; flex-direction: column; gap: 24px; padding: 32px 16px 16px; }
+.pct-pane { box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 24px 16px 8px; }
 .pct-pane[hidden] { display: none !important; }
 .pct-home { align-items: center; justify-content: center; flex: 1; text-align: center; }
 .pct-wordmark {
   margin: 0;
   font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: clamp(14px, 4vw, 26px);
+  font-size: clamp(12px, 3.2vw, 18px);
   line-height: 1.15;
   color: var(--md-sys-color-primary);
   text-align: left;
@@ -150,20 +148,28 @@ md-top-app-bar { background: var(--md-sys-color-surface-container); color: var(-
 .pct-hint { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 48ch; }
 .pct-info { max-width: 960px; width: 100%; margin: 0 auto; }
 /* The footer sits at the bottom of the viewport. The wave, links and notice move down together. */
-.pct-main .pct-footer { margin-top: auto; padding-top: 64px; padding-bottom: 40px; }
+.pct-main .pct-footer { margin-top: auto; padding-top: 40px; padding-bottom: 24px; }
 .pct-wavy { display: block; width: 100%; margin-bottom: 24px; --md-sys-color-primary: var(--md-sys-color-outline-variant); }
 .pct-bench { max-width: 960px; width: 100%; margin: 0 auto; }
 .pct-bench-head { display: flex; flex-direction: column; gap: 8px; }
 .pct-bench-head h1 { margin: 0; color: var(--md-sys-color-on-surface); }
 .pct-bench-head p { margin: 0; color: var(--md-sys-color-on-surface-variant); max-width: 64ch; }
-.pct-config { display: flex; flex-direction: column; gap: 6px; padding: 24px; box-sizing: border-box; }
+.pct-config { display: flex; flex-direction: column; gap: 4px; box-sizing: border-box; }
 .pct-config p { margin: 0; color: var(--md-sys-color-on-surface-variant); }
 .pct-config p.md-title-medium { color: var(--md-sys-color-on-surface); }
 .pct-config-link { align-self: flex-start; margin-top: 4px; }
 .pct-run-row { display: flex; }
-.pct-partial { padding: 24px; box-sizing: border-box; }
+.pct-partial { box-sizing: border-box; }
 .pct-partial p { margin: 0 0 8px; }
 .pct-partial p:last-child { margin-bottom: 0; }
+
+/* Phones: the rail gives way to a bottom navigation bar. */
+.pct-bar { display: none; }
+@media (max-width: 599px) {
+  .pct-rail { display: none; }
+  .pct-bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; background: var(--md-sys-color-surface-container); }
+  .pct-main { padding-bottom: 80px; }
+}
 `;
 
 /** Injects the page styles once. */
